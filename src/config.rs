@@ -12,14 +12,14 @@ pub use time::{format_description::FormatItem, macros::format_description, UtcOf
 pub enum LevelPadding {
     Left,
     Right,
-    Off
+    Off,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum ThreadPadding {
     Left(usize),
     Right(usize),
-    Off
+    Off,
 }
 #[derive(Debug, Clone, Copy)]
 /// Padding to be used for logging the thread id/name

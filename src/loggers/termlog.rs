@@ -1,10 +1,10 @@
 use log::{
     set_boxed_logger, set_max_level, Level, LevelFilter, Log, Metadata, Record, SetLoggerError,
 };
+use std::default::Default;
 use std::io::{Error, Write};
 use std::sync::Mutex;
 use termcolor::{BufferedStandardStream, ColorChoice};
-use std::default::Default;
 #[cfg(not(feature = "ansi_term"))]
 use termcolor::{ColorSpec, WriteColor};
 
@@ -14,7 +14,7 @@ use crate::{Config, SharedLogger, ThreadLogMode};
 
 struct OutputStreams {
     err: BufferedStandardStream,
-    out: BufferedStandardStream
+    out: BufferedStandardStream,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Default)]
