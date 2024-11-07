@@ -45,6 +45,7 @@ jobs:
          with:
           cache-on-failure: "true"
           cache-all-crates: "true"
+          key: ${{ runner.os }}-cargo-rust_stable-${{ hashFiles('**/Cargo.toml') }}
        - name: Publish crates
          uses: katyo/publish-crates@v2
          with:
