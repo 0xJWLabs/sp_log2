@@ -6,7 +6,7 @@ pub use self::config::{
     ThreadLogMode, ThreadPadding,
 };
 
-pub use self::loggers::{CombinedLogger, SimpleLogger, WriteLogger};
+pub use self::loggers::{CombinedLogger, SimpleLogger, WriteLogger, FileLogger};
 #[cfg(feature = "termcolor")]
 pub use self::loggers::{TermLogger, TerminalMode};
 #[cfg(feature = "termcolor")]

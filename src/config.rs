@@ -82,7 +82,6 @@ pub enum LineEnding {
 /// Construct using [`Default`](Config::default) or using [`ConfigBuilder`]
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub(crate) max_file_size: Option<usize>,
     pub(crate) time: LevelFilter,
     pub(crate) level: LevelFilter,
     pub(crate) level_padding: LevelPadding,
@@ -120,12 +119,6 @@ impl ConfigBuilder {
     /// Create a new default ConfigBuilder
     pub fn new() -> ConfigBuilder {
         ConfigBuilder(Config::default())
-    }
-
-    /// Set maximum file size
-    pub fn set_max_file_size(&mut self, file_size: usize) -> &mut ConfigBuilder {
-        self.0.max_file_size = Some(file_size);
-        self
     }
 
     /// Set a custom line ending
@@ -377,7 +370,6 @@ impl Default for Config {
             filter_allow: Cow::Borrowed(&[]),
             filter_ignore: Cow::Borrowed(&[]),
             write_log_enable_colors: false,
-            max_file_size: None,
 
             #[cfg(feature = "termcolor")]
             level_color: [

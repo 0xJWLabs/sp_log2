@@ -1,8 +1,8 @@
+//! Module providing the WriteLogger Implementation
+
 use super::logging::try_log;
 use crate::{Config, SharedLogger};
 use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record, SetLoggerError};
-use std::any::Any;
-use std::fs::File;
 use std::io::Write;
 use std::sync::Mutex;
 
@@ -21,8 +21,8 @@ impl<W: Write + Send + 'static> WriteLogger<W> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate simplelog;
+    /// # use simplelog::*;
     /// # use std::fs::File;
     /// # fn main() {
     /// let _ = WriteLogger::init(LevelFilter::Info, Config::default(), File::create("my_rust_bin.log").unwrap());
@@ -42,8 +42,8 @@ impl<W: Write + Send + 'static> WriteLogger<W> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate simplelog;
+    /// # use simplelog::*;
     /// # use std::fs::File;
     /// # fn main() {
     /// let file_logger = WriteLogger::new(LevelFilter::Info, Config::default(), File::create("my_rust_bin.log").unwrap());
@@ -65,25 +65,8 @@ impl<W: Write + Send + 'static> Log for WriteLogger<W> {
     }
 
     fn log(&self, record: &Record<'_>) {
-        let get_file_size = || {
-            let writable = self.writable.lock().unwrap();
-            let any_ref = &*writable as &dyn Any;
-            if let Some(file) = any_ref.downcast_ref::<File>() {
-                if let Ok(metadata) = file.metadata() {
-                    return Some(metadata.len());
-                }
-            }
-            None
-        };
         if self.enabled(record.metadata()) {
             let mut write_lock = self.writable.lock().unwrap();
-            if let Some(file_size) = get_file_size() {
-                if let Some(max_file_size) = self.config.max_file_size {
-                    if file_size as usize >= max_file_size {
-                        return;
-                    }
-                }
-            }
             let _ = try_log(&self.config, record, &mut *write_lock);
         }
     }
