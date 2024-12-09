@@ -124,7 +124,7 @@ impl ConfigBuilder {
 
     /// Set maximum file size
     pub fn set_max_file_size(&mut self, file_size: usize) -> &mut ConfigBuilder {
-        self.0.max_file_size =  Some(file_size);
+        self.0.max_file_size = Some(file_size);
         self
     }
 
