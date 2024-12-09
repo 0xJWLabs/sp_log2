@@ -3,12 +3,12 @@
 use super::logging::try_log;
 use crate::{Config, SharedLogger};
 use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record, SetLoggerError};
-use std::io::Write;
-use std::path::Path;
-use std::sync::Mutex;
 use std::fs::rename;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+use std::sync::Mutex;
 
 /// The FileLogger struct. Provides a Logger implementation for structs implementing `Write`, e.g. File
 pub struct FileLogger {
@@ -33,7 +33,12 @@ impl FileLogger {
     /// let _ = FileLogger::init(LevelFilter::Info, Config::default(), "my_rust_bin.log", Some(1024 * 1024 * 10));
     /// # }
     /// ```
-    pub fn init(log_level: LevelFilter, config: Config, file_path: &str, max_size: Option<u64>) -> Result<(), SetLoggerError> {
+    pub fn init(
+        log_level: LevelFilter,
+        config: Config,
+        file_path: &str,
+        max_size: Option<u64>,
+    ) -> Result<(), SetLoggerError> {
         set_max_level(log_level);
         set_boxed_logger(Self::new(log_level, config, file_path, max_size))
     }
