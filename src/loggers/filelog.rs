@@ -3,11 +3,10 @@
 use super::logging::try_log;
 use crate::{Config, SharedLogger};
 use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record, SetLoggerError};
-use std::fs::rename;
+use std::fs::remove_file;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
 use std::sync::Mutex;
 
 /// The FileLogger struct. Provides a Logger implementation for structs implementing `Write`, e.g. File
@@ -43,7 +42,7 @@ impl FileLogger {
         set_boxed_logger(Self::new(log_level, config, file_path, max_size))
     }
 
-    /// Rotates the log file when it exceeds the maximum size.
+    /// Rotates the log file by deleting the current log and creating a new one if it exceeds the maximum size.
     fn rotate(&self) {
         if let Some(max_size) = self.max_size {
             let writable = self.writable.lock().unwrap();
@@ -54,8 +53,9 @@ impl FileLogger {
                     // Close current file by dropping the lock
                     drop(writable);
 
-                    // Perform rotation
-                    self.perform_rotation();
+                    if let Err(err) = remove_file(&self.file_path) {
+                        eprintln!("Error deleting log file: {}", err);
+                    }
 
                     // Reopen log file
                     let new_file = OpenOptions::new()
@@ -67,23 +67,6 @@ impl FileLogger {
                     *self.writable.lock().unwrap() = new_file;
                 }
             }
-        }
-    }
-
-    /// Rename the current log file to the next available backup (e.g., `app.log.1`, `app.log.2`, etc.).
-    fn perform_rotation(&self) {
-        let path = Path::new(&self.file_path);
-        let mut backup_number = 1;
-
-        // Find the first available backup number
-        while path.with_extension(backup_number.to_string()).exists() {
-            backup_number += 1;
-        }
-
-        // Rename current log file to the first available backup
-        let backup = path.with_extension(backup_number.to_string());
-        if let Err(err) = rename(path, &backup) {
-            eprintln!("Error rotating log file: {}", err);
         }
     }
 
