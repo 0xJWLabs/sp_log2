@@ -4,8 +4,10 @@ use super::logging::try_log;
 use crate::{Config, SharedLogger};
 use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use std::fs::remove_file;
+use std::fs::rename;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::io::Write;
 use std::sync::Mutex;
 
@@ -53,8 +55,10 @@ impl FileLogger {
                     // Close current file by dropping the lock
                     drop(writable);
 
-                    if let Err(err) = remove_file(&self.file_path) {
-                        eprintln!("Error deleting log file: {}", err);
+                    let backup_path = format!("{}.bak", self.file_path);
+
+                    if let Err(err) = rename(&self.file_path, &backup_path) {
+                        eprintln!("Error moving log file to backup: {}", err);
                     }
 
                     // Reopen log file
@@ -93,6 +97,18 @@ impl FileLogger {
         file_path: &str,
         max_size: Option<u64>,
     ) -> Box<Self> {
+        let backup_path = format!("{}.bak", file_path);
+
+        // Attempt to remove the existing .bak file, if it exists
+        if let Err(err) = remove_file(&backup_path) {
+            if err.kind() != ErrorKind::NotFound {
+                eprintln!(
+                    "Failed to remove existing backup file {}: {}",
+                    backup_path, err
+                );
+            }
+        }
+
         let file = OpenOptions::new()
             .create(true)
             .append(true)
