@@ -1,6 +1,6 @@
 [package]
 name = "sp_log2"
-version = "0.0.4"
+version = "0.0.6"
 edition = "2021"
 authors = ["0xJWLabs <0xJWLabs@gmail.com>"]
 description = "A simple and easy way of logging for Rust's log crate"

@@ -133,7 +133,7 @@ pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Erro
 
 #[inline(always)]
 pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
-    let file = record.file().unwrap_or("<unknown>");
+    let file = record.file().unwrap_or("<unknown>").replace("\\", "/");
     let location = if let Some(line) = record.line() {
         format!("{}:{}", file, line)
     } else {
