@@ -7,6 +7,8 @@ use std::str::FromStr;
 use std::thread;
 use termcolor::{BufferedStandardStream, Color, ColorSpec, WriteColor};
 
+/// Attempts to log a message based on the provided configuration.
+/// Writes the log message to the provided writer if it should not be skipped.
 #[inline(always)]
 pub fn try_log<W>(config: &Config, record: &Record<'_>, write: &mut W) -> Result<(), Error>
 where
@@ -89,6 +91,7 @@ where
     Ok(())
 }
 
+/// Writes the current time based on the configured format.
 #[inline(always)]
 pub fn write_time(config: &Config) -> Result<String, Error> {
     use time::error::Format;
@@ -108,6 +111,7 @@ pub fn write_time(config: &Config) -> Result<String, Error> {
     }
 }
 
+/// Writes the log level to a string based on the configured padding.
 #[inline(always)]
 pub fn write_level(record: &Record<'_>, config: &Config) -> Result<String, Error> {
     let level = match config.level_padding {
@@ -121,6 +125,7 @@ pub fn write_level(record: &Record<'_>, config: &Config) -> Result<String, Error
     Ok(formatted_level)
 }
 
+/// Writes the target (module) of the log record based on the configured padding.
 #[inline(always)]
 pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Error> {
     let target = match config.target_padding {
@@ -131,6 +136,7 @@ pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Erro
     Ok(target)
 }
 
+/// Writes the file and line number of the log record's source location.
 #[inline(always)]
 pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
     let file = record.file().unwrap_or("<unknown>").replace("\\", "/");
@@ -142,6 +148,7 @@ pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
     Ok(location)
 }
 
+/// Writes the module path of the log record.
 #[inline(always)]
 pub fn write_module(record: &Record<'_>) -> Result<String, Error> {
     let module = record.module_path().unwrap_or("<unknown>");
@@ -149,6 +156,7 @@ pub fn write_module(record: &Record<'_>) -> Result<String, Error> {
     Ok(module.to_string())
 }
 
+/// Writes the current thread's name based on the configuration.
 pub fn write_thread_name(config: &Config) -> Result<String, Error> {
     if let Some(name) = thread::current().name() {
         let thread_name = match config.thread_padding {
@@ -168,6 +176,7 @@ pub fn write_thread_name(config: &Config) -> Result<String, Error> {
     }
 }
 
+/// Writes the current thread's ID based on the configuration.
 pub fn write_thread_id(config: &Config) -> Result<String, Error> {
     let id = format!("{:?}", thread::current().id())
         .replace("ThreadId(", "")
@@ -184,12 +193,13 @@ pub fn write_thread_id(config: &Config) -> Result<String, Error> {
     Ok(thread_id)
 }
 
+/// Writes the arguments of the log record, appending a line ending.
 #[inline(always)]
-#[allow(unused_variables)]
 pub fn write_args(record: &Record<'_>, line_ending: &str) -> Result<String, Error> {
     Ok(format!("{}{}", record.args(), line_ending))
 }
 
+/// Determines whether the log record should be skipped based on the configuration's filters.
 #[inline(always)]
 pub fn should_skip(config: &Config, record: &Record<'_>) -> bool {
     // If a module path and allowed list are available
@@ -219,6 +229,7 @@ pub fn should_skip(config: &Config, record: &Record<'_>) -> bool {
     false
 }
 
+#[inline]
 fn parse_percent_or_255(s: &str) -> Option<(u8, bool)> {
     if s.ends_with('%') {
         s.strip_suffix('%')
@@ -229,6 +240,7 @@ fn parse_percent_or_255(s: &str) -> Option<(u8, bool)> {
     }
 }
 
+#[inline]
 fn parse_hex(s: &str) -> Option<Color> {
     if !s.is_ascii() {
         return None;
@@ -253,6 +265,7 @@ fn parse_hex(s: &str) -> Option<Color> {
     }
 }
 
+#[inline]
 fn parse_rgb(rgb: &str) -> Option<Color> {
     let params: Vec<&str> = rgb.split(',').map(|s| s.trim()).collect();
     if params.len() != 3 {
@@ -271,6 +284,7 @@ fn parse_rgb(rgb: &str) -> Option<Color> {
     None
 }
 
+#[inline]
 fn apply_style(style: &str) -> Option<(Color, bool)> {
     if style.starts_with('#') || style.starts_with("bg#") {
         let prefix_len = if style.starts_with('#') { 1 } else { 3 };
@@ -299,6 +313,7 @@ fn apply_style(style: &str) -> Option<(Color, bool)> {
     None
 }
 
+#[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn parse_and_format_log_term(
     writer: &mut BufferedStandardStream,
@@ -327,6 +342,7 @@ pub fn parse_and_format_log_term(
     )
 }
 
+#[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn parse_and_format_log<W>(
     writer: &mut W,

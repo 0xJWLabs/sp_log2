@@ -6,19 +6,31 @@ use termcolor::Color;
 pub use time::{format_description::FormatItem, macros::format_description, UtcOffset};
 
 #[derive(Debug, Clone, Copy)]
-/// Padding for logging level
+/// Defines how padding should be applied to the logging level in the log output.
 pub enum LevelPadding {
+    /// Pad the logging level with spaces to the left.
     Left,
+
+    /// Pad the logging level with spaces to the right.
     Right,
+
+    /// No padding applied to the logging level.
     Off,
 }
 
 #[derive(Debug, Clone, Copy)]
+/// Defines how padding should be applied to the thread information in the log output.
 pub enum ThreadPadding {
+    /// Pad the thread information with spaces to the left, with a specified width.
     Left(usize),
+
+    /// Pad the thread information with spaces to the right, with a specified width.
     Right(usize),
+
+    /// No padding applied to the thread information.
     Off,
 }
+
 #[derive(Debug, Clone, Copy)]
 /// Padding to be used for logging the thread id/name
 pub enum TargetPadding {
@@ -50,11 +62,22 @@ pub(crate) enum TimeFormat {
 
 #[allow(non_upper_case_globals, non_snake_case)]
 pub mod Format {
+    /// Flag to include the time in the log format.
     pub const Time: u8 = 1;
+
+    /// Flag to include the log level (e.g., INFO, ERROR) in the log format.
     pub const LevelFlag: u8 = 2;
+
+    /// Flag to include the thread information in the log format.
     pub const Thread: u8 = 4;
+
+    /// Flag to include the file location (e.g., file name, line number) in the log format.
     pub const FileLocation: u8 = 8;
+
+    /// Flag to include the target (e.g., module or crate) in the log format.
     pub const Target: u8 = 16;
+
+    /// Flag to include the module name in the log format.
     pub const Module: u8 = 32;
 }
 
@@ -119,12 +142,22 @@ impl Config {
 pub struct ConfigBuilder(Config);
 
 impl ConfigBuilder {
-    /// Create a new default ConfigBuilder
+    /// Creates a new `ConfigBuilder` with default configuration values.
     pub fn new() -> ConfigBuilder {
         ConfigBuilder(Config::default())
     }
 
-    /// Set a custom line ending
+    /// Sets a custom line ending for the logger.
+    ///
+    /// The supported options are:
+    /// - `LF` (Line Feed)
+    /// - `CR` (Carriage Return)
+    /// - `Crlf` (Carriage Return + Line Feed)
+    /// - `VT` (Vertical Tab)
+    /// - `FF` (Form Feed)
+    /// - `Nel` (Next Line)
+    /// - `LS` (Line Separator)
+    /// - `PS` (Paragraph Separator)
     pub fn set_line_ending(&mut self, line_ending: LineEnding) -> &mut ConfigBuilder {
         match line_ending {
             LineEnding::LF => self.0.line_ending = String::from("\u{000A}"),
@@ -139,59 +172,82 @@ impl ConfigBuilder {
         self
     }
 
-    /// Set logging format
+    /// Sets the logging format.
+    ///
+    /// The `format` value is an unsigned 8-bit integer that determines the format of the log entries.
     pub fn set_format(&mut self, format: u8) -> &mut ConfigBuilder {
         self.0.format = format;
         self
     }
 
-    /// Set logging format
+    /// Sets the custom formatter for the logs.
+    ///
+    /// The `formatter` is an optional string representing the format to be used. If `None`, the default format is applied.
     pub fn set_formatter(&mut self, formatter: Option<&str>) -> &mut ConfigBuilder {
         self.0.formatter = formatter.map(|s| s.to_string());
         self
     }
 
+    /// Sets the minimum log level filter.
+    ///
+    /// The `level` value specifies the minimum level of logs to be displayed. Logs with a level lower than this will be ignored.
     pub fn set_min_level(&mut self, level: LevelFilter) -> &mut ConfigBuilder {
         self.0.min_level = level;
         self
     }
 
+    /// Sets the maximum log level filter.
+    ///
+    /// The `level` value specifies the maximum level of logs to be displayed. Logs with a level higher than this will be ignored.
     pub fn set_max_level(&mut self, level: LevelFilter) -> &mut ConfigBuilder {
         self.0.max_level = level;
         self
     }
 
+    /// Enables or disables the use of colors in the logs.
+    ///
+    /// The `enable` flag determines whether colors should be used in the log output.
     pub fn set_enable_colors(&mut self, enable: bool) -> &mut ConfigBuilder {
         self.0.enable_colors = enable;
         self
     }
 
-    /// Set how the thread should be padded
+    /// Sets the padding for the target field in the log output.
+    ///
+    /// The `padding` value determines how the target field should be padded.
     pub fn set_target_padding(&mut self, padding: TargetPadding) -> &mut ConfigBuilder {
         self.0.target_padding = padding;
         self
     }
 
-    /// Set how the levels should be padded, when logging (default is Off)
+    /// Sets the padding for the log level field.
+    ///
+    /// The `padding` value determines how the level field should be padded when logging. Default is `Off`.
     pub fn set_level_padding(&mut self, padding: LevelPadding) -> &mut ConfigBuilder {
         self.0.level_padding = padding;
         self
     }
 
-    /// Set how the thread should be padded
+    /// Sets the padding for the thread field in the log output.
+    ///
+    /// The `padding` value determines how the thread field should be padded.
     pub fn set_thread_padding(&mut self, padding: ThreadPadding) -> &mut ConfigBuilder {
         self.0.thread_padding = padding;
         self
     }
 
-    /// Set the mode for logging the thread
+    /// Sets the mode for logging thread information.
+    ///
+    /// The `mode` value determines how the thread field is logged.
     pub fn set_thread_mode(&mut self, mode: ThreadLogMode) -> &mut ConfigBuilder {
         self.0.thread_log_mode = mode;
         self
     }
 
-    /// Set the color used for printing the level (if the logger supports it),
-    /// or None to use the default foreground color
+    /// Sets the color used for logging the log level.
+    ///
+    /// If `color` is `None`, the default foreground color is used.
+    /// This is useful when customizing the log output appearance based on log levels.
     pub fn set_level_color(&mut self, level: Level, color: Option<Color>) -> &mut ConfigBuilder {
         self.0.level_color[level as usize] = color;
         self
@@ -223,19 +279,25 @@ impl ConfigBuilder {
         self
     }
 
-    /// Set time format string to use rfc2822.
+    /// Sets the time format to RFC 2822.
+    ///
+    /// This format is typically used for email headers and specifies a standard date-time representation.
     pub fn set_time_format_rfc2822(&mut self) -> &mut ConfigBuilder {
         self.0.time_format = TimeFormat::Rfc2822;
         self
     }
 
-    /// Set time format string to use rfc3339.
+    /// Sets the time format to RFC 3339.
+    ///
+    /// This format is a common representation for timestamps in log entries.
     pub fn set_time_format_rfc3339(&mut self) -> &mut ConfigBuilder {
         self.0.time_format = TimeFormat::Rfc3339;
         self
     }
 
-    /// Set offset used for logging time (default is UTC)
+    /// Sets the time offset used for logging the timestamp (default is UTC).
+    ///
+    /// The `offset` specifies the timezone offset to be applied to the log timestamp.
     pub fn set_time_offset(&mut self, offset: UtcOffset) -> &mut ConfigBuilder {
         self.0.time_offset = offset;
         self
@@ -270,10 +332,10 @@ impl ConfigBuilder {
         self
     }
 
-    /// Add allowed target filters.
-    /// If any are specified, only records from targets matching one of these entries will be printed
+    /// Adds an allowed target filter with a dynamic string.
     ///
-    /// For example, `add_filter_allow(format!("{}::{}","tokio", "uds"))` would allow only logging from the `tokio` crates `uds` module.
+    /// This specifies that only log entries from the given target will be printed.
+    /// For example, `add_filter_allow(format!("{}::{}","tokio", "uds"))` will allow logs only from the `tokio::uds` target.
     pub fn add_filter_allow(&mut self, filter_allow: String) -> &mut ConfigBuilder {
         let mut list = Vec::from(&*self.0.filter_allow);
         list.push(Cow::Owned(filter_allow));
@@ -281,8 +343,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// Clear allowed target filters.
-    /// If none are specified, nothing is filtered out
+    /// Clears all allowed target filters.
+    ///
+    /// This removes any previously set filters and allows logs from all targets.
     pub fn clear_filter_allow(&mut self) -> &mut ConfigBuilder {
         self.0.filter_allow = Cow::Borrowed(&[]);
         self
@@ -310,14 +373,17 @@ impl ConfigBuilder {
         self
     }
 
-    /// Clear ignore target filters.
-    /// If none are specified, nothing is filtered
+    /// Clears all denied target filters.
+    ///
+    /// This removes any previously set filters and does not filter out any targets.
     pub fn clear_filter_ignore(&mut self) -> &mut ConfigBuilder {
         self.0.filter_ignore = Cow::Borrowed(&[]);
         self
     }
 
-    /// Build new `Config`
+    /// Builds and returns the final `Config` instance.
+    ///
+    /// This applies all the configurations set in the builder and returns the complete `Config`.
     pub fn build(&mut self) -> Config {
         self.0.clone()
     }
@@ -332,10 +398,7 @@ impl Default for ConfigBuilder {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            format: Format::LevelFlag
-                | Format::Time
-                | Format::Thread
-                | Format::Target,
+            format: Format::LevelFlag | Format::Time | Format::Thread | Format::Target,
             level_padding: LevelPadding::Off,
             thread_log_mode: ThreadLogMode::IDs,
             thread_padding: ThreadPadding::Off,
