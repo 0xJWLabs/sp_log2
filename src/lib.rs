@@ -3,7 +3,7 @@ mod loggers;
 
 pub use self::config::{
     format_description, Config, ConfigBuilder, FormatItem, LevelPadding, TargetPadding,
-    ThreadLogMode, ThreadPadding, UtcOffset,
+    ThreadLogMode, ThreadPadding, UtcOffset, Format
 };
 
 pub use self::loggers::{CombinedLogger, FileLogger, SimpleLogger, WriteLogger};
@@ -28,8 +28,8 @@ pub trait SharedLogger: Log {
     /// # Examples
     ///
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let logger = SimpleLogger::new(LevelFilter::Info, Config::default());
     /// println!("{}", logger.level());
@@ -44,8 +44,8 @@ pub trait SharedLogger: Log {
     /// # Examples
     ///
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let logger = SimpleLogger::new(LevelFilter::Info, Config::default());
     /// println!("{:?}", logger.config());

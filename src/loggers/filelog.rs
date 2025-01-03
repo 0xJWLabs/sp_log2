@@ -28,8 +28,8 @@ impl FileLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let _ = FileLogger::init(LevelFilter::Info, Config::default(), "my_rust_bin.log", Some(1024 * 1024 * 10));
     /// # }
@@ -83,8 +83,8 @@ impl FileLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let file_logger = FileLogger::new(LevelFilter::Info, Config::default(), "my_rust_bin.log", Some(1024 * 1024 * 10));
     /// # }

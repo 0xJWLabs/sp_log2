@@ -10,6 +10,7 @@ use termcolor::{ColorSpec, WriteColor};
 
 use super::logging::*;
 
+use crate::config::Format;
 use crate::{Config, SharedLogger, ThreadLogMode};
 
 struct OutputStreams {
@@ -45,8 +46,8 @@ impl TermLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     ///     TermLogger::init(
     ///         LevelFilter::Info,
@@ -79,8 +80,8 @@ impl TermLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let term_logger = TermLogger::new(
     ///     LevelFilter::Info,
@@ -127,56 +128,105 @@ impl TermLogger {
         #[cfg(not(feature = "ansi_term"))]
         let color = self.config.level_color[record.level() as usize];
 
-        if self.config.time <= record.level() && self.config.time != LevelFilter::Off {
-            write_time(term_lock, &self.config)?;
+        if record.level() > self.config.min_level || record.level() < self.config.max_level {
+            return Ok(());
         }
 
-        if self.config.level <= record.level() && self.config.level != LevelFilter::Off {
-            #[cfg(not(feature = "ansi_term"))]
-            if !self.config.write_log_enable_colors {
-                term_lock.set_color(ColorSpec::new().set_fg(color))?;
-            }
+        let mut level = String::new();
+        let mut time = String::new();
+        let mut thread = String::new();
+        let mut target = String::new();
+        let mut location = String::new();
+        let mut module = String::new();
 
-            write_level(record, term_lock, &self.config)?;
-
-            #[cfg(not(feature = "ansi_term"))]
-            if !self.config.write_log_enable_colors {
-                term_lock.reset()?;
-            }
+        if self.config.format & Format::Time != 0 {
+            time = write_time(&self.config)?;
         }
 
-        if self.config.thread <= record.level() && self.config.thread != LevelFilter::Off {
-            match self.config.thread_log_mode {
-                ThreadLogMode::IDs => {
-                    write_thread_id(term_lock, &self.config)?;
-                }
-                ThreadLogMode::Names | ThreadLogMode::Both => {
-                    write_thread_name(term_lock, &self.config)?;
-                }
+        if self.config.format & Format::LevelFlag != 0 {
+            level = write_level(record, &self.config)?;
+        }
+
+        if self.config.format & Format::Thread != 0 {
+            thread = match self.config.thread_log_mode {
+                ThreadLogMode::IDs => write_thread_id(&self.config)?,
+                ThreadLogMode::Names | ThreadLogMode::Both => write_thread_name(&self.config)?,
             }
         }
 
-        if self.config.target <= record.level() && self.config.target != LevelFilter::Off {
-            write_target(record, term_lock, &self.config)?;
+        if self.config.format & Format::Target != 0 {
+            target = write_target(record, &self.config)?;
         }
 
-        if self.config.location <= record.level() && self.config.location != LevelFilter::Off {
-            write_location(record, term_lock)?;
+        if self.config.format & Format::Location != 0 {
+            location = write_location(record)?;
         }
 
-        if self.config.module <= record.level() && self.config.module != LevelFilter::Off {
-            write_module(record, term_lock)?;
+        if self.config.format & Format::Module != 0 {
+            module = write_module(record)?;
         }
 
-        #[cfg(feature = "paris")]
-        write_args(
-            record,
-            term_lock,
-            self.config.enable_paris_formatting,
-            &self.config.line_ending,
-        )?;
         #[cfg(not(feature = "paris"))]
-        write_args(record, term_lock, &self.config.line_ending)?;
+        let mut args = write_args(record, &self.config.line_ending)?;
+        args = args.trim_end().to_string();
+
+        let mut r = String::with_capacity(
+            level.len()
+                + time.len()
+                + thread.len()
+                + target.len()
+                + location.len()
+                + module.len()
+                + args.len()
+                + 4,
+        );
+        if !time.is_empty() {
+            r.push_str(&time);
+        }
+
+        if !level.is_empty() {
+            r.push(' ');
+            r.push_str(&level);
+        }
+
+        if !thread.is_empty() {
+            r.push(' ');
+            r.push_str(&thread);
+        }
+
+        if !target.is_empty() {
+            r.push(' ');
+            r.push_str(&target);
+        }
+
+        if !module.is_empty() {
+            r.push(' ');
+
+            r.push_str(&module);
+        }
+
+        r.push(' ');
+
+        r.push_str(&args);
+
+        if !location.is_empty() {
+            r.push(' ');
+            r.push_str(&location);
+        }
+
+        r.push('\n');
+
+        #[cfg(not(feature = "ansi_term"))]
+        if !self.config.write_log_enable_colors {
+            term_lock.set_color(ColorSpec::new().set_fg(color))?;
+        }
+
+        write!(term_lock, "{}", r)?;
+
+        #[cfg(not(feature = "ansi_term"))]
+        if !self.config.write_log_enable_colors {
+            term_lock.reset()?;
+        }
 
         // The log crate holds the logger as a `static mut`, which isn't dropped
         // at program exit: https://doc.rust-lang.org/reference/items/static-items.html

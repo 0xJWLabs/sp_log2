@@ -1,14 +1,14 @@
-# sp_log
+# sp_log2
 
 ## A simple and easy way to log for Rust's crate
 
-`sp_log` does not aim to provide a rich set of features, nor to provide the
+`sp_log2` does not aim to provide a rich set of features, nor to provide the
 best logging solution. It aims to be a maintainable, easy to integrate facility
-for small to medium sized projects. In those cases `sp_log` should provide an
+for small to medium sized projects. In those cases `sp_log2` should provide an
 easy alternative.
 
 ## Concept
-`sp_log` provides a series of logging facilities, that can be easily combined.
+`sp_log2` provides a series of logging facilities, that can be easily combined.
 
 - `SimpleLogger` (very basic logger that logs to stderr/out, should never fail)
 - `TermLogger` (advanced terminal logger, that splits to stderr/out and has color support) (can be excluded on unsupported platforms)
@@ -18,9 +18,9 @@ easy alternative.
 ## Usage
 ```rust
 #[macro_use] extern crate log;
-extern crate sp_log;
+extern crate sp_log2;
 
-use sp_log::*;
+use sp_log2::*;
 
 use std::fs::File;
 
@@ -42,7 +42,7 @@ fn main() {
 ### Results in
 ```
 $ cargo run --example usage
-   Compiling sp_log v0.1.0 (file:///home/jo/dev/projects/rust/sp_log)
+   Compiling sp_log2 v0.1.0 (file:///home/jo/dev/projects/rust/sp_log2)
      Running `target/debug/examples/usage`
 [ERROR] Bright red error
 ```
@@ -57,7 +57,7 @@ and my_rust_binary.log
 Just add
 ```
 [dependencies]
-sp_log = "^0.1.0"
+sp_log2 = "^0.1.0"
 ```
 to your `Cargo.toml`
 
@@ -67,7 +67,7 @@ This crate can internally depend on a [paris](https://github.com/0x20F/paris) cr
 To use this feature you need to set a _paris_ feature, like this:
 ```
 [dependencies]
-sp_log = { version = "^0.1.0", features = ["paris"] }
+sp_log2 = { version = "^0.1.0", features = ["paris"] }
 ```
 in your `Cargo.toml`
 

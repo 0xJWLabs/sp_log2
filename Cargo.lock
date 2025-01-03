@@ -104,8 +104,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp_log"
-version = "0.2.1"
+name = "sp_log2"
+version = "0.0.1"
 dependencies = [
  "ansi_term",
  "log",

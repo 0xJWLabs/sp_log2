@@ -50,6 +50,17 @@ pub(crate) enum TimeFormat {
     Custom(&'static [time::format_description::FormatItem<'static>]),
 }
 
+#[allow(non_upper_case_globals, non_snake_case)]
+pub mod Format {
+    pub const Time: u8 = 1;
+    pub const FileName: u8 = 2;
+    pub const LevelFlag: u8 = 4;
+    pub const Thread: u8 = 8;
+    pub const Location: u8 = 16;
+    pub const Target: u8 = 32;
+    pub const Module: u8 = 64;
+}
+
 /// UTF-8 end of line character sequences
 pub enum LineEnding {
     /// Line feed
@@ -82,16 +93,13 @@ pub enum LineEnding {
 /// Construct using [`Default`](Config::default) or using [`ConfigBuilder`]
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub(crate) time: LevelFilter,
-    pub(crate) level: LevelFilter,
+    pub(crate) format: u8,
     pub(crate) level_padding: LevelPadding,
-    pub(crate) thread: LevelFilter,
     pub(crate) thread_log_mode: ThreadLogMode,
     pub(crate) thread_padding: ThreadPadding,
-    pub(crate) target: LevelFilter,
     pub(crate) target_padding: TargetPadding,
-    pub(crate) location: LevelFilter,
-    pub(crate) module: LevelFilter,
+    pub(crate) min_level: LevelFilter,
+    pub(crate) max_level: LevelFilter,
     pub(crate) time_format: TimeFormat,
     pub(crate) time_offset: UtcOffset,
     pub(crate) filter_allow: Cow<'static, [Cow<'static, str>]>,
@@ -136,45 +144,26 @@ impl ConfigBuilder {
         self
     }
 
-    /// Set at which level and above (more verbose) the level itself shall be logged (default is Error)
+
+    /// Set logging format 
+    pub fn set_format(&mut self, format: u8) -> &mut ConfigBuilder {
+        self.0.format = format;
+        self
+    }
+
+    pub fn set_min_level(&mut self, level: LevelFilter) -> &mut ConfigBuilder {
+        self.0.min_level = level;
+        self
+    }
+
     pub fn set_max_level(&mut self, level: LevelFilter) -> &mut ConfigBuilder {
-        self.0.level = level;
-        self
-    }
-
-    /// Set at which level and  above (more verbose) the current time shall be logged (default is Error)
-    pub fn set_time_level(&mut self, time: LevelFilter) -> &mut ConfigBuilder {
-        self.0.time = time;
-        self
-    }
-
-    /// Set at which level and above (more verbose) the thread id shall be logged. (default is Debug)
-    pub fn set_thread_level(&mut self, thread: LevelFilter) -> &mut ConfigBuilder {
-        self.0.thread = thread;
-        self
-    }
-
-    /// Set at which level and above (more verbose) the target shall be logged. (default is Debug)
-    pub fn set_target_level(&mut self, target: LevelFilter) -> &mut ConfigBuilder {
-        self.0.target = target;
+        self.0.max_level = level;
         self
     }
 
     /// Set how the thread should be padded
     pub fn set_target_padding(&mut self, padding: TargetPadding) -> &mut ConfigBuilder {
         self.0.target_padding = padding;
-        self
-    }
-
-    /// Set at which level and above (more verbose) a source code reference shall be logged (default is Trace)
-    pub fn set_location_level(&mut self, location: LevelFilter) -> &mut ConfigBuilder {
-        self.0.location = location;
-        self
-    }
-
-    /// Set at which level and above (more verbose) a module shall be logged (default is Off)
-    pub fn set_module_level(&mut self, module: LevelFilter) -> &mut ConfigBuilder {
-        self.0.module = module;
         self
     }
 
@@ -217,7 +206,7 @@ impl ConfigBuilder {
     /// # Usage
     ///
     /// ```
-    /// # use sp_log::{ConfigBuilder, format_description};
+    /// # use sp_log2::{ConfigBuilder, format_description};
     /// let config = ConfigBuilder::new()
     ///     .set_time_format_custom(format_description!("[hour]:[minute]:[second].[subsecond]"))
     ///     .build();
@@ -355,22 +344,18 @@ impl Default for ConfigBuilder {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            time: LevelFilter::Error,
-            level: LevelFilter::Error,
+            format: Format::LevelFlag | Format::Time | Format::FileName | Format::Thread | Format::Target,
             level_padding: LevelPadding::Off,
-            thread: LevelFilter::Debug,
             thread_log_mode: ThreadLogMode::IDs,
             thread_padding: ThreadPadding::Off,
-            target: LevelFilter::Debug,
             target_padding: TargetPadding::Off,
-            location: LevelFilter::Trace,
-            module: LevelFilter::Off,
             time_format: TimeFormat::Custom(format_description!("[hour]:[minute]:[second]")),
             time_offset: UtcOffset::UTC,
             filter_allow: Cow::Borrowed(&[]),
             filter_ignore: Cow::Borrowed(&[]),
             write_log_enable_colors: false,
-
+            max_level: LevelFilter::Error,
+            min_level: LevelFilter::Trace,
             #[cfg(feature = "termcolor")]
             level_color: [
                 None,                // Default foreground

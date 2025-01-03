@@ -21,8 +21,8 @@ impl CombinedLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2
+    /// # use sp_log2:*;
     /// # use std::fs::File;
     /// # fn main() {
     /// let _ = CombinedLogger::init(
@@ -52,8 +52,8 @@ impl CombinedLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2
+    /// # use sp_log2:*;
     /// # use std::fs::File;
     /// # fn main() {
     /// let combined_logger = CombinedLogger::new(

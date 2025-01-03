@@ -1,6 +1,6 @@
-use crate::config::{TargetPadding, TimeFormat};
+use crate::config::{Format, TargetPadding, TimeFormat};
 use crate::{Config, LevelPadding, ThreadLogMode, ThreadPadding};
-use log::{LevelFilter, Record};
+use log::Record;
 use std::io::{Error, Write};
 use std::thread;
 #[cfg(all(feature = "termcolor", feature = "ansi_term"))]
@@ -30,77 +30,116 @@ where
         return Ok(());
     }
 
-    if config.time <= record.level() && config.time != LevelFilter::Off {
-        write_time(write, config)?;
+    if record.level() > config.min_level || record.level() < config.max_level {
+        return Ok(());
     }
 
-    if config.level <= record.level() && config.level != LevelFilter::Off {
-        write_level(record, write, config)?;
+    let mut level = String::new();
+    let mut time = String::new();
+    let mut thread = String::new();
+    let mut target = String::new();
+    let mut location = String::new();
+    let mut module = String::new();
+
+    if config.format & Format::Time != 0 {
+        time = write_time(config)?;
     }
 
-    if config.thread <= record.level() && config.thread != LevelFilter::Off {
-        match config.thread_log_mode {
-            ThreadLogMode::IDs => {
-                write_thread_id(write, config)?;
-            }
-            ThreadLogMode::Names | ThreadLogMode::Both => {
-                write_thread_name(write, config)?;
-            }
+    if config.format & Format::LevelFlag != 0 {
+        level = write_level(record, config)?;
+    }
+
+    if config.format & Format::Thread != 0 {
+        thread = match config.thread_log_mode {
+            ThreadLogMode::IDs => write_thread_id(config)?,
+            ThreadLogMode::Names | ThreadLogMode::Both => write_thread_name(config)?,
         }
     }
 
-    if config.target <= record.level() && config.target != LevelFilter::Off {
-        write_target(record, write, config)?;
+    if config.format & Format::Target != 0 {
+        target = write_target(record, config)?;
     }
 
-    if config.location <= record.level() && config.location != LevelFilter::Off {
-        write_location(record, write)?;
+    if config.format & Format::Location != 0 {
+        location = write_location(record)?;
     }
 
-    if config.module <= record.level() && config.module != LevelFilter::Off {
-        write_module(record, write)?;
+    if config.format & Format::Module != 0 {
+        module = write_module(record)?;
     }
 
-    #[cfg(feature = "paris")]
-    return write_args(
-        record,
-        write,
-        config.enable_paris_formatting,
-        &config.line_ending,
+    let args = write_args(record, &config.line_ending)?;
+
+    let mut r = String::with_capacity(
+        level.len()
+            + time.len()
+            + thread.len()
+            + target.len()
+            + location.len()
+            + module.len()
+            + args.len()
+            + 4,
     );
-    #[cfg(not(feature = "paris"))]
-    return write_args(record, write, &config.line_ending);
-}
+    if !time.is_empty() {
+        r.push_str(&time);
+    }
 
-#[inline(always)]
-pub fn write_time<W>(write: &mut W, config: &Config) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
-    use time::error::Format;
-    use time::format_description::well_known::*;
+    if !level.is_empty() {
+        r.push(' ');
+        r.push_str(&level);
+    }
 
-    let time = time::OffsetDateTime::now_utc().to_offset(config.time_offset);
-    let res = match config.time_format {
-        TimeFormat::Rfc2822 => time.format_into(write, &Rfc2822),
-        TimeFormat::Rfc3339 => time.format_into(write, &Rfc3339),
-        TimeFormat::Custom(format) => time.format_into(write, &format),
-    };
-    match res {
-        Err(Format::StdIo(err)) => return Err(err),
-        Err(err) => panic!("Invalid time format: {}", err),
-        _ => {}
-    };
+    if !thread.is_empty() {
+        r.push(' ');
+        r.push_str(&thread);
+    }
 
-    write!(write, " ")?;
+    if !target.is_empty() {
+        r.push(' ');
+        r.push_str(&target);
+    }
+
+    if !module.is_empty() {
+        r.push(' ');
+
+        r.push_str(&module);
+    }
+
+    r.push(' ');
+
+    r.push_str(&args);
+
+    if !location.is_empty() {
+        r.push(' ');
+        r.push_str(&location);
+    }
+
+    write!(write, "{}", r)?;
+
     Ok(())
 }
 
 #[inline(always)]
-pub fn write_level<W>(record: &Record<'_>, write: &mut W, config: &Config) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
+pub fn write_time(config: &Config) -> Result<String, Error> {
+    use time::error::Format;
+    use time::format_description::well_known::*;
+
+    let time = time::OffsetDateTime::now_utc().to_offset(config.time_offset);
+    let formatted_time = match config.time_format {
+        TimeFormat::Rfc2822 => time.format(&Rfc2822),
+        TimeFormat::Rfc3339 => time.format(&Rfc3339),
+        TimeFormat::Custom(format) => time.format(&format),
+    };
+
+    match formatted_time {
+        Ok(time_string) => Ok(time_string),
+        Err(Format::StdIo(err)) => Err(err),
+        Err(err) => panic!("Invalid time format: {}", err),
+    }
+}
+
+#[inline(always)]
+pub fn write_level(record: &Record<'_>, config: &Config) -> Result<String, Error> {
     #[cfg(all(feature = "termcolor", feature = "ansi_term"))]
     let color = match &config.level_color[record.level() as usize] {
         Some(termcolor) => {
@@ -120,147 +159,97 @@ where
     };
 
     #[cfg(all(feature = "termcolor", feature = "ansi_term"))]
-    match color {
-        Some(c) => write!(write, "{} ", c.paint(level))?,
-        None => write!(write, "{} ", level)?,
+    let formatted_level = match color {
+        Some(c) => format!("{}", c.paint(level)),
+        None => level.to_string(),
     };
 
     #[cfg(not(feature = "ansi_term"))]
-    write!(write, "{} ", level)?;
+    let formatted_level = level.to_string();
 
-    Ok(())
+    Ok(formatted_level)
 }
 
 #[inline(always)]
-pub fn write_target<W>(record: &Record<'_>, write: &mut W, config: &Config) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
-    // dbg!(&config.target_padding);
-    match config.target_padding {
-        TargetPadding::Left(pad) => {
-            write!(
-                write,
-                "{target:>pad$}: ",
-                pad = pad,
-                target = record.target()
-            )?;
-        }
-        TargetPadding::Right(pad) => {
-            write!(
-                write,
-                "{target:<pad$}: ",
-                pad = pad,
-                target = record.target()
-            )?;
-        }
-        TargetPadding::Off => {
-            write!(write, "{}: ", record.target())?;
-        }
-    }
-
-    Ok(())
+pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Error> {
+    let target = match config.target_padding {
+        TargetPadding::Left(pad) => format!("{:>pad$}:", record.target(), pad = pad),
+        TargetPadding::Right(pad) => format!("{:<pad$}:", record.target(), pad = pad),
+        TargetPadding::Off => format!("{}:", record.target()),
+    };
+    Ok(target)
 }
 
 #[inline(always)]
-pub fn write_location<W>(record: &Record<'_>, write: &mut W) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
+pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
     let file = record.file().unwrap_or("<unknown>");
-    if let Some(line) = record.line() {
-        write!(write, "[{}:{}] ", file, line)?;
+    let location = if let Some(line) = record.line() {
+        format!("[{}:{}]", file, line)
     } else {
-        write!(write, "[{}:<unknown>] ", file)?;
-    }
-    Ok(())
+        format!("[{}:<unknown>]", file)
+    };
+    Ok(location)
 }
 
 #[inline(always)]
-pub fn write_module<W>(record: &Record<'_>, write: &mut W) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
+pub fn write_module(record: &Record<'_>) -> Result<String, Error> {
     let module = record.module_path().unwrap_or("<unknown>");
-    write!(write, "[{}] ", module)?;
-    Ok(())
+    Ok(format!("[{}]", module))
 }
 
-pub fn write_thread_name<W>(write: &mut W, config: &Config) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
+pub fn write_thread_name(config: &Config) -> Result<String, Error> {
     if let Some(name) = thread::current().name() {
-        match config.thread_padding {
+        let thread_name = match config.thread_padding {
             ThreadPadding::Left { 0: qty } => {
-                write!(write, "({name:>0$}) ", qty, name = name)?;
+                format!("({:>width$})", name, width = qty)
             }
             ThreadPadding::Right { 0: qty } => {
-                write!(write, "({name:<0$}) ", qty, name = name)?;
+                format!("({:<width$})", name, width = qty)
             }
-            ThreadPadding::Off => {
-                write!(write, "({}) ", name)?;
-            }
-        }
+            ThreadPadding::Off => format!("({})", name),
+        };
+        Ok(thread_name)
     } else if config.thread_log_mode == ThreadLogMode::Both {
-        write_thread_id(write, config)?;
+        write_thread_id(config)
+    } else {
+        Ok(String::new())
     }
-
-    Ok(())
 }
 
-pub fn write_thread_id<W>(write: &mut W, config: &Config) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
-    let id = format!("{:?}", thread::current().id());
-    let id = id.replace("ThreadId(", "");
-    let id = id.replace(")", "");
-    match config.thread_padding {
+pub fn write_thread_id(config: &Config) -> Result<String, Error> {
+    let id = format!("{:?}", thread::current().id())
+        .replace("ThreadId(", "")
+        .replace(")", "");
+    let thread_id = match config.thread_padding {
         ThreadPadding::Left { 0: qty } => {
-            write!(write, "({id:>0$}) ", qty, id = id)?;
+            format!("({:>width$})", id, width = qty)
         }
         ThreadPadding::Right { 0: qty } => {
-            write!(write, "({id:<0$}) ", qty, id = id)?;
+            format!("({:<width$})", id, width = qty)
         }
-        ThreadPadding::Off => {
-            write!(write, "({}) ", id)?;
-        }
-    }
-    Ok(())
+        ThreadPadding::Off => format!("({})", id),
+    };
+    Ok(thread_id)
 }
 
 #[inline(always)]
 #[cfg(feature = "paris")]
-pub fn write_args<W>(
+pub fn write_args(
     record: &Record<'_>,
-    write: &mut W,
     with_colors: bool,
     line_ending: &str,
-) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
-    write!(
-        write,
-        "{}{}",
-        crate::__private::paris::formatter::format_string(
-            format!("{}", record.args()),
-            with_colors
-        ),
-        line_ending
-    )?;
-    Ok(())
+) -> Result<String, Error> {
+    let formatted_args = crate::__private::paris::formatter::format_string(
+        format!("{}", record.args()),
+        with_colors,
+    );
+    Ok(format!("{}{}", formatted_args, line_ending))
 }
 
 #[inline(always)]
 #[cfg(not(feature = "paris"))]
-pub fn write_args<W>(record: &Record<'_>, write: &mut W, line_ending: &str) -> Result<(), Error>
-where
-    W: Write + Sized,
-{
-    write!(write, "{}{}", record.args(), line_ending)?;
-    Ok(())
+pub fn write_args(record: &Record<'_>, line_ending: &str) -> Result<String, Error> {
+    Ok(format!("{}{}", record.args(), line_ending))
 }
 
 #[inline(always)]

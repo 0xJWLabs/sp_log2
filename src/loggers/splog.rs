@@ -21,8 +21,8 @@ impl SimpleLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let _ = SimpleLogger::init(LevelFilter::Info, Config::default());
     /// # }
@@ -41,8 +41,8 @@ impl SimpleLogger {
     ///
     /// # Examples
     /// ```
-    /// # extern crate sp_log;
-    /// # use sp_log::*;
+    /// # extern crate sp_log2;
+    /// # use sp_log2::*;
     /// # fn main() {
     /// let simple_logger = SimpleLogger::new(LevelFilter::Info, Config::default());
     /// # }
