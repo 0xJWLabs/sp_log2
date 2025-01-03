@@ -1,6 +1,8 @@
 use crate::config::{Format, TargetPadding, TimeFormat};
 use crate::{Config, LevelPadding, ThreadLogMode, ThreadPadding};
 use log::Record;
+use regex::Regex;
+use std::any::Any;
 use std::io::{Error, Write};
 use std::thread;
 use termcolor::{BufferedStandardStream, Color, ColorSpec, WriteColor};
@@ -8,7 +10,7 @@ use termcolor::{BufferedStandardStream, Color, ColorSpec, WriteColor};
 #[inline(always)]
 pub fn try_log<W>(config: &Config, record: &Record<'_>, write: &mut W) -> Result<(), Error>
 where
-    W: Write + Sized,
+    W: Write + Sized + Any,
 {
     if should_skip(config, record) {
         return Ok(());
@@ -56,15 +58,7 @@ where
 
     if config.formatter.is_some() {
         parse_and_format_log(
-            write,
-            &config.formatter.clone().unwrap(),
-            &level,
-            &time,
-            &thread,
-            &target,
-            &location,
-            &module,
-            &args,
+            write, config, &level, &time, &thread, &target, &location, &module, &args,
         )?;
     } else {
         if !time.is_empty() {
@@ -225,10 +219,25 @@ pub fn should_skip(config: &Config, record: &Record<'_>) -> bool {
     false
 }
 
+fn apply_style(style: &str) -> Option<Color> {
+    if style.starts_with("rgb(") {
+        let rgb_re = Regex::new(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)").unwrap();
+        if let Some(caps) = rgb_re.captures(style) {
+            let r: u8 = caps[1].parse().unwrap_or(255);
+            let g: u8 = caps[2].parse().unwrap_or(255);
+            let b: u8 = caps[3].parse().unwrap_or(255);
+
+            return Some(Color::Rgb(r, g, b));
+        }
+    }
+
+    None
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn parse_and_format_log_term(
     writer: &mut BufferedStandardStream,
-    color: Option<Color>,
+    level_color: Option<Color>,
     config: &Config,
     level: &str,
     time: &str,
@@ -238,98 +247,25 @@ pub fn parse_and_format_log_term(
     module: &str,
     message: &str,
 ) -> Result<(), Error> {
-    let mut in_placeholder = false;
-    let mut placeholder = String::new();
-    let format_str = config.formatter.clone().unwrap();
-
-    for c in format_str.chars() {
-        if in_placeholder {
-            if c == '}' {
-                in_placeholder = false;
-                match placeholder.as_str() {
-                    "level" => {
-                        if !level.is_empty() {
-                            if !config.write_log_enable_colors {
-                                writer.set_color(ColorSpec::new().set_fg(color))?;
-                            }
-                            write!(writer, "[{}]", level)?;
-                            if !config.write_log_enable_colors {
-                                writer.reset()?;
-                            }
-                        }
-                    }
-                    "level:nb" => {
-                        if !level.is_empty() {
-                            if !config.write_log_enable_colors {
-                                writer.set_color(ColorSpec::new().set_fg(color))?;
-                            }
-                            write!(writer, "{}", level)?;
-                            if !config.write_log_enable_colors {
-                                writer.reset()?;
-                            }
-                        }
-                    }
-                    "time" => {
-                        if !time.is_empty() {
-                            write!(writer, "{}", time)?;
-                        }
-                    }
-                    "thread" => {
-                        if !thread.is_empty() {
-                            write!(writer, "{}", thread)?;
-                        }
-                    }
-                    "target" => {
-                        if !target.is_empty() {
-                            write!(writer, "{}", target)?;
-                        }
-                    }
-                    "file" => {
-                        if !file.is_empty() {
-                            write!(writer, "{}", file)?;
-                        }
-                    }
-                    "module" => {
-                        if !module.is_empty() {
-                            write!(writer, "{}", module)?;
-                        }
-                    }
-                    "message" => {
-                        if !message.is_empty() {
-                            write!(writer, "{}", message)?;
-                        }
-                    }
-                    _ => {
-                        // If the placeholder is unrecognized, add it back as-is
-                        write!(writer, "{{")?; // Write '{'
-                        write!(writer, "{}", placeholder)?; // Write the placeholder value
-                        write!(writer, "}}")?;
-                    }
-                }
-                placeholder.clear();
-            } else {
-                placeholder.push(c);
-            }
-        } else if c == '{' {
-            in_placeholder = true;
-        } else {
-            write!(writer, "{}", c)?;
-        }
-    }
-
-    // Handle unclosed placeholders
-    if in_placeholder {
-        write!(writer, "{{")?; // Write '{'
-        write!(writer, "{}", placeholder)?; // Write the placeholder value
-    }
-
-    Ok(())
+    parse_and_format_log_internal(
+        writer,
+        level_color,
+        config,
+        level,
+        time,
+        thread,
+        target,
+        file,
+        module,
+        message,
+        true,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn parse_and_format_log<W>(
     writer: &mut W,
-    format_str: &str,
+    config: &Config,
     level: &str,
     time: &str,
     thread: &str,
@@ -337,90 +273,112 @@ pub fn parse_and_format_log<W>(
     file: &str,
     module: &str,
     message: &str,
-) -> Result<(), Error> 
+) -> Result<(), Error>
 where
-    W: Write + Sized,
+    W: Write + Sized + Any,
 {
-    let mut result = String::with_capacity(
-        format_str.len()
-            + level.len()
-            + time.len()
-            + thread.len()
-            + target.len()
-            + file.len()
-            + module.len()
-            + message.len(),
-    );
-    let mut in_placeholder = false;
-    let mut placeholder = String::new();
+    parse_and_format_log_internal(
+        writer, None, config, level, time, thread, target, file, module, message, false,
+    )
+}
 
-    for c in format_str.chars() {
-        if in_placeholder {
-            if c == '}' {
-                in_placeholder = false;
-                match placeholder.as_str() {
-                    "level" => {
-                        if !level.is_empty() {
-                            write!(writer, "[{}]", level)?;
-                        }
-                    }
-                    "level:nb" => {
-                        if !level.is_empty() {
-                            write!(writer, "{}", level)?;
-                        }
-                    }
-                    "time" => {
-                        if !time.is_empty() {
-                            write!(writer, "{}", time)?;
-                        }
-                    }
-                    "thread" => {
-                        if !thread.is_empty() {
-                            write!(writer, "{}", thread)?;
-                        }
-                    }
-                    "target" => {
-                        if !target.is_empty() {
-                            write!(writer, "{}", target)?;
-                        }
-                    }
-                    "file" => {
-                        if !file.is_empty() {
-                            write!(writer, "{}", file)?;
-                        }
-                    }
-                    "module" => {
-                        if !module.is_empty() {
-                            write!(writer, "{}", module)?;
-                        }
-                    }
-                    "message" => {
-                        if !message.is_empty() {
-                            write!(writer, "{}", message)?;
-                        }
-                    }
-                    _ => {
-                        // If the placeholder is unrecognized, add it back as-is
-                        result.push('{');
-                        result.push_str(&placeholder);
-                        result.push('}');
-                    }
-                }
-                placeholder.clear();
-            } else {
-                placeholder.push(c);
-            }
-        } else if c == '{' {
-            in_placeholder = true;
-        } else {
-            write!(writer, "{}", c)?;
+#[allow(clippy::too_many_arguments)]
+fn parse_and_format_log_internal<W>(
+    writer: &mut W,
+    level_color: Option<Color>,
+    config: &Config,
+    level: &str,
+    time: &str,
+    thread: &str,
+    target: &str,
+    file: &str,
+    module: &str,
+    message: &str,
+    is_terminal: bool,
+) -> Result<(), Error>
+where
+    W: Write + Sized + Any,
+{
+    let format_str = config.formatter.clone().unwrap();
+    let re = Regex::new(r"\{(\w+)(?::([^:}]+))?(?::([^}]+))?\}").unwrap();
+    let mut last_end = 0; // Tracks the position of the last match's end
+
+    // Iterate over each match found by the regex
+    for caps in re.captures_iter(format_str.as_str()) {
+        // Write the part of the format string before the match
+        if last_end < caps.get(0).unwrap().start() {
+            write!(
+                writer,
+                "{}",
+                &format_str[last_end..caps.get(0).unwrap().start()]
+            )?;
         }
+
+        let key = &caps[1];
+        let style = caps.get(2).map_or("", |m| m.as_str());
+        let level_part = caps.get(3).map_or("", |m| m.as_str());
+
+        let use_bracket_level = if key == "level" {
+            match (style, level_part) {
+                // Case 1: level:nb
+                ("nb", "") | ("", "nb") => false, // No brackets around the level
+                // Case 2: level:color:nb
+                (_, "nb") => false, // No brackets around the level
+                // Case 3: level (default, with brackets)
+                _ => true, // Default case, brackets around the level
+            }
+        } else {
+            true // For all non-level keys, we assume brackets are used
+        };
+
+        let color = if key == "level" {
+            match (style, level_part) {
+                ("nb", "") | ("", "nb") => level_color,
+                (_, "nb") => apply_style(style).or(level_color),
+                _ => apply_style(style).or(level_color),
+            }
+        } else {
+            apply_style(style)
+        };
+
+        if is_terminal && !config.write_log_enable_colors {
+            if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+            {
+                writer.set_color(ColorSpec::new().set_fg(color))?; // This works only for WriteColor types
+            }
+        }
+
+        match key {
+            "time" => write!(writer, "{}", time)?,
+            "thread" => write!(writer, "{}", thread)?,
+            "target" => write!(writer, "{}", target)?,
+            "level" => {
+                if use_bracket_level {
+                    write!(writer, "[{}]", level)?
+                } else {
+                    write!(writer, "{}", level)?
+                }
+            }
+            "file" => write!(writer, "{}", file)?,
+            "module" => write!(writer, "{}", module)?,
+            "message" => write!(writer, "{}", message)?,
+            _ => write!(writer, "{}", &caps[0])?,
+        }
+
+        if is_terminal && !config.write_log_enable_colors {
+            if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+            {
+                writer.reset()?;
+            }
+        }
+
+        // Update the last_end to the end position of the current match
+        last_end = caps.get(0).unwrap().end();
     }
 
-    // Handle unclosed placeholders
-    if in_placeholder {
-        write!(writer, "{{")?; // Write '{'
-        write!(writer, "{}", placeholder)?; // Write the placeholder value    
+    // Write any remaining part of the format_str after the last match
+    if last_end < format_str.len() {
+        write!(writer, "{}", &format_str[last_end..])?;
     }
 
     Ok(())
