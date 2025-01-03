@@ -68,7 +68,7 @@ where
         module = write_module(record)?;
     }
 
-    let args = write_args(record, &config.line_ending)?;
+    let args = write_args(record, &config.line_ending, false)?;
 
     let mut r = String::with_capacity(
         level.len()
@@ -233,23 +233,21 @@ pub fn write_thread_id(config: &Config) -> Result<String, Error> {
 }
 
 #[inline(always)]
-#[cfg(feature = "paris")]
-pub fn write_args(
-    record: &Record<'_>,
-    with_colors: bool,
-    line_ending: &str,
-) -> Result<String, Error> {
-    let formatted_args = crate::__private::paris::formatter::format_string(
-        format!("{}", record.args()),
-        with_colors,
-    );
-    Ok(format!("{}{}", formatted_args, line_ending))
-}
+#[allow(unused_variables)]
+pub fn write_args(record: &Record<'_>, line_ending: &str, with_colors: bool) -> Result<String, Error> {
+    #[cfg(feature = "paris")]
+    {
+        let formatted_args = crate::__private::paris::formatter::format_string(
+            format!("{}", record.args()),
+            with_colors,
+        );
+        Ok(format!("{}{}", formatted_args, line_ending))
+    }
 
-#[inline(always)]
-#[cfg(not(feature = "paris"))]
-pub fn write_args(record: &Record<'_>, line_ending: &str) -> Result<String, Error> {
-    Ok(format!("{}{}", record.args(), line_ending))
+    #[cfg(not(feature = "paris"))]
+    {
+        Ok(format!("{}{}", record.args(), line_ending))
+    }
 }
 
 #[inline(always)]

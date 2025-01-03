@@ -166,8 +166,7 @@ impl TermLogger {
             module = write_module(record)?;
         }
 
-        #[cfg(not(feature = "paris"))]
-        let mut args = write_args(record, &self.config.line_ending)?;
+        let mut args = write_args(record, &self.config.line_ending, false)?;
         args = args.trim_end().to_string();
 
         let mut r = String::with_capacity(
