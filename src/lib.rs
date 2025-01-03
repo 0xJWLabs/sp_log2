@@ -7,20 +7,12 @@ pub use self::config::{
 };
 
 pub use self::loggers::{CombinedLogger, FileLogger, SimpleLogger, WriteLogger};
-#[cfg(feature = "termcolor")]
 pub use self::loggers::{TermLogger, TerminalMode};
-#[cfg(feature = "termcolor")]
 pub use termcolor::{Color, ColorChoice};
 
 pub use log::{Level, LevelFilter};
 
 use log::Log;
-
-#[cfg(feature = "paris")]
-#[doc(hidden)]
-pub mod __private {
-    pub use paris;
-}
 
 pub trait SharedLogger: Log {
     /// Returns the set Level for this Logger

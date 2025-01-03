@@ -1,13 +1,10 @@
-#[cfg(feature = "termcolor")]
 use log::*;
-#[cfg(feature = "termcolor")]
 use sp_log2::*;
 
-#[cfg(feature = "termcolor")]
 fn main() {
-
     let mut config_builder = ConfigBuilder::new();
-    config_builder.set_format(Format::LevelFlag | Format::Time | Format::FileName | Format::Thread | Format::Target | Format::Location);
+    config_builder.set_format(Format::LevelFlag | Format::Time | Format::Thread | Format::Target | Format::FileLocation);
+    config_builder.set_formatter(Some("{time} {level} ({thread}) {target}: {message} [{file}]\n"));
     let config = config_builder.build();
     TermLogger::init(
         LevelFilter::Trace,
@@ -21,9 +18,4 @@ fn main() {
     info!("Blue info");
     debug!("Cyan debug");
     trace!("White trace");
-}
-
-#[cfg(not(feature = "termcolor"))]
-fn main() {
-    println!("this example requires the termcolor feature.");
 }

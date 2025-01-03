@@ -5,7 +5,6 @@ use std::default::Default;
 use std::io::{Error, Write};
 use std::sync::Mutex;
 use termcolor::{BufferedStandardStream, ColorChoice};
-#[cfg(not(feature = "ansi_term"))]
 use termcolor::{ColorSpec, WriteColor};
 
 use super::logging::*;
@@ -125,7 +124,6 @@ impl TermLogger {
         record: &Record<'_>,
         term_lock: &mut BufferedStandardStream,
     ) -> Result<(), Error> {
-        #[cfg(not(feature = "ansi_term"))]
         let color = self.config.level_color[record.level() as usize];
 
         if record.level() > self.config.min_level || record.level() < self.config.max_level {
@@ -158,7 +156,7 @@ impl TermLogger {
             target = write_target(record, &self.config)?;
         }
 
-        if self.config.format & Format::Location != 0 {
+        if self.config.format & Format::FileLocation != 0 {
             location = write_location(record)?;
         }
 
@@ -166,65 +164,52 @@ impl TermLogger {
             module = write_module(record)?;
         }
 
-        let mut args = write_args(record, &self.config.line_ending, false)?;
+        let mut args = write_args(record, &self.config.line_ending)?;
         args = args.trim_end().to_string();
 
-        let mut r = String::with_capacity(
-            level.len()
-                + time.len()
-                + thread.len()
-                + target.len()
-                + location.len()
-                + module.len()
-                + args.len()
-                + 4,
-        );
-        if !time.is_empty() {
-            r.push_str(&time);
-        }
+        if self.config.formatter.is_some() {
+            parse_and_format_log_term(
+                term_lock,
+                color,
+                &self.config,
+                &level,
+                &time,
+                &thread,
+                &target,
+                &location,
+                &module,
+                &args,
+            )?;
+        } else {
+            if !time.is_empty() {
+                write!(term_lock, "{}", time)?;
+            }
 
-        if !level.is_empty() {
-            r.push(' ');
-            r.push_str(&level);
-        }
+            if !level.is_empty() {
+                if !self.config.write_log_enable_colors {
+                    term_lock.set_color(ColorSpec::new().set_fg(color))?;
+                }
+                write!(term_lock, " [{}]", level)?;
+                if !self.config.write_log_enable_colors {
+                    term_lock.reset()?;
+                }
+            }
 
-        if !thread.is_empty() {
-            r.push(' ');
-            r.push_str(&thread);
-        }
+            if !thread.is_empty() {
+                write!(term_lock, " ({})", thread)?;
+            }
 
-        if !target.is_empty() {
-            r.push(' ');
-            r.push_str(&target);
-        }
+            if !target.is_empty() {
+                write!(term_lock, " {}:", target)?;
+            }
 
-        if !module.is_empty() {
-            r.push(' ');
+            write!(term_lock, " {}", args)?;
 
-            r.push_str(&module);
-        }
+            if !location.is_empty() {
+                write!(term_lock, " [{}]", location)?;
+            }
 
-        r.push(' ');
-
-        r.push_str(&args);
-
-        if !location.is_empty() {
-            r.push(' ');
-            r.push_str(&location);
-        }
-
-        r.push('\n');
-
-        #[cfg(not(feature = "ansi_term"))]
-        if !self.config.write_log_enable_colors {
-            term_lock.set_color(ColorSpec::new().set_fg(color))?;
-        }
-
-        write!(term_lock, "{}", r)?;
-
-        #[cfg(not(feature = "ansi_term"))]
-        if !self.config.write_log_enable_colors {
-            term_lock.reset()?;
+            writeln!(term_lock)?;
         }
 
         // The log crate holds the logger as a `static mut`, which isn't dropped

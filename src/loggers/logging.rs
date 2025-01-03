@@ -3,23 +3,7 @@ use crate::{Config, LevelPadding, ThreadLogMode, ThreadPadding};
 use log::Record;
 use std::io::{Error, Write};
 use std::thread;
-#[cfg(all(feature = "termcolor", feature = "ansi_term"))]
-use termcolor::Color;
-
-#[cfg(all(feature = "termcolor", feature = "ansi_term"))]
-pub fn termcolor_to_ansiterm(color: &Color) -> Option<ansi_term::Color> {
-    match color {
-        Color::Black => Some(ansi_term::Color::Black),
-        Color::Red => Some(ansi_term::Color::Red),
-        Color::Green => Some(ansi_term::Color::Green),
-        Color::Yellow => Some(ansi_term::Color::Yellow),
-        Color::Blue => Some(ansi_term::Color::Blue),
-        Color::Magenta => Some(ansi_term::Color::Purple),
-        Color::Cyan => Some(ansi_term::Color::Cyan),
-        Color::White => Some(ansi_term::Color::White),
-        _ => None,
-    }
-}
+use termcolor::{BufferedStandardStream, Color, ColorSpec, WriteColor};
 
 #[inline(always)]
 pub fn try_log<W>(config: &Config, record: &Record<'_>, write: &mut W) -> Result<(), Error>
@@ -60,7 +44,7 @@ where
         target = write_target(record, config)?;
     }
 
-    if config.format & Format::Location != 0 {
+    if config.format & Format::FileLocation != 0 {
         location = write_location(record)?;
     }
 
@@ -68,53 +52,45 @@ where
         module = write_module(record)?;
     }
 
-    let args = write_args(record, &config.line_ending, false)?;
+    let args = write_args(record, &config.line_ending)?;
 
-    let mut r = String::with_capacity(
-        level.len()
-            + time.len()
-            + thread.len()
-            + target.len()
-            + location.len()
-            + module.len()
-            + args.len()
-            + 4,
-    );
-    if !time.is_empty() {
-        r.push_str(&time);
+    if config.formatter.is_some() {
+        parse_and_format_log(
+            write,
+            &config.formatter.clone().unwrap(),
+            &level,
+            &time,
+            &thread,
+            &target,
+            &location,
+            &module,
+            &args,
+        )?;
+    } else {
+        if !time.is_empty() {
+            write!(write, "{}", time)?;
+        }
+
+        if !level.is_empty() {
+            write!(write, " [{}]", level)?;
+        }
+
+        if !thread.is_empty() {
+            write!(write, " ({})", thread)?;
+        }
+
+        if !target.is_empty() {
+            write!(write, " {}:", target)?;
+        }
+
+        write!(write, " {}", args)?;
+
+        if !location.is_empty() {
+            write!(write, " [{}]", location)?;
+        }
+
+        writeln!(write)?;
     }
-
-    if !level.is_empty() {
-        r.push(' ');
-        r.push_str(&level);
-    }
-
-    if !thread.is_empty() {
-        r.push(' ');
-        r.push_str(&thread);
-    }
-
-    if !target.is_empty() {
-        r.push(' ');
-        r.push_str(&target);
-    }
-
-    if !module.is_empty() {
-        r.push(' ');
-
-        r.push_str(&module);
-    }
-
-    r.push(' ');
-
-    r.push_str(&args);
-
-    if !location.is_empty() {
-        r.push(' ');
-        r.push_str(&location);
-    }
-
-    write!(write, "{}", r)?;
 
     Ok(())
 }
@@ -140,31 +116,12 @@ pub fn write_time(config: &Config) -> Result<String, Error> {
 
 #[inline(always)]
 pub fn write_level(record: &Record<'_>, config: &Config) -> Result<String, Error> {
-    #[cfg(all(feature = "termcolor", feature = "ansi_term"))]
-    let color = match &config.level_color[record.level() as usize] {
-        Some(termcolor) => {
-            if config.write_log_enable_colors {
-                termcolor_to_ansiterm(termcolor)
-            } else {
-                None
-            }
-        }
-        None => None,
-    };
-
     let level = match config.level_padding {
-        LevelPadding::Left => format!("[{: >5}]", record.level()),
-        LevelPadding::Right => format!("[{: <5}]", record.level()),
-        LevelPadding::Off => format!("[{}]", record.level()),
+        LevelPadding::Left => format!("{: >5}", record.level()),
+        LevelPadding::Right => format!("{: <5}", record.level()),
+        LevelPadding::Off => record.level().to_string(),
     };
 
-    #[cfg(all(feature = "termcolor", feature = "ansi_term"))]
-    let formatted_level = match color {
-        Some(c) => format!("{}", c.paint(level)),
-        None => level.to_string(),
-    };
-
-    #[cfg(not(feature = "ansi_term"))]
     let formatted_level = level.to_string();
 
     Ok(formatted_level)
@@ -173,9 +130,9 @@ pub fn write_level(record: &Record<'_>, config: &Config) -> Result<String, Error
 #[inline(always)]
 pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Error> {
     let target = match config.target_padding {
-        TargetPadding::Left(pad) => format!("{:>pad$}:", record.target(), pad = pad),
-        TargetPadding::Right(pad) => format!("{:<pad$}:", record.target(), pad = pad),
-        TargetPadding::Off => format!("{}:", record.target()),
+        TargetPadding::Left(pad) => format!("{:>pad$}", record.target(), pad = pad),
+        TargetPadding::Right(pad) => format!("{:<pad$}", record.target(), pad = pad),
+        TargetPadding::Off => record.target().to_string(),
     };
     Ok(target)
 }
@@ -184,9 +141,9 @@ pub fn write_target(record: &Record<'_>, config: &Config) -> Result<String, Erro
 pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
     let file = record.file().unwrap_or("<unknown>");
     let location = if let Some(line) = record.line() {
-        format!("[{}:{}]", file, line)
+        format!("{}:{}", file, line)
     } else {
-        format!("[{}:<unknown>]", file)
+        format!("{}:<unknown>", file)
     };
     Ok(location)
 }
@@ -194,19 +151,20 @@ pub fn write_location(record: &Record<'_>) -> Result<String, Error> {
 #[inline(always)]
 pub fn write_module(record: &Record<'_>) -> Result<String, Error> {
     let module = record.module_path().unwrap_or("<unknown>");
-    Ok(format!("[{}]", module))
+
+    Ok(module.to_string())
 }
 
 pub fn write_thread_name(config: &Config) -> Result<String, Error> {
     if let Some(name) = thread::current().name() {
         let thread_name = match config.thread_padding {
             ThreadPadding::Left { 0: qty } => {
-                format!("({:>width$})", name, width = qty)
+                format!("{:>width$}", name, width = qty)
             }
             ThreadPadding::Right { 0: qty } => {
-                format!("({:<width$})", name, width = qty)
+                format!("{:<width$}", name, width = qty)
             }
-            ThreadPadding::Off => format!("({})", name),
+            ThreadPadding::Off => name.to_string(),
         };
         Ok(thread_name)
     } else if config.thread_log_mode == ThreadLogMode::Both {
@@ -222,32 +180,20 @@ pub fn write_thread_id(config: &Config) -> Result<String, Error> {
         .replace(")", "");
     let thread_id = match config.thread_padding {
         ThreadPadding::Left { 0: qty } => {
-            format!("({:>width$})", id, width = qty)
+            format!("{:>width$}", id, width = qty)
         }
         ThreadPadding::Right { 0: qty } => {
-            format!("({:<width$})", id, width = qty)
+            format!("{:<width$}", id, width = qty)
         }
-        ThreadPadding::Off => format!("({})", id),
+        ThreadPadding::Off => id.to_string(),
     };
     Ok(thread_id)
 }
 
 #[inline(always)]
 #[allow(unused_variables)]
-pub fn write_args(record: &Record<'_>, line_ending: &str, with_colors: bool) -> Result<String, Error> {
-    #[cfg(feature = "paris")]
-    {
-        let formatted_args = crate::__private::paris::formatter::format_string(
-            format!("{}", record.args()),
-            with_colors,
-        );
-        Ok(format!("{}{}", formatted_args, line_ending))
-    }
-
-    #[cfg(not(feature = "paris"))]
-    {
-        Ok(format!("{}{}", record.args(), line_ending))
-    }
+pub fn write_args(record: &Record<'_>, line_ending: &str) -> Result<String, Error> {
+    Ok(format!("{}{}", record.args(), line_ending))
 }
 
 #[inline(always)]
@@ -277,4 +223,205 @@ pub fn should_skip(config: &Config, record: &Record<'_>) -> bool {
     }
 
     false
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn parse_and_format_log_term(
+    writer: &mut BufferedStandardStream,
+    color: Option<Color>,
+    config: &Config,
+    level: &str,
+    time: &str,
+    thread: &str,
+    target: &str,
+    file: &str,
+    module: &str,
+    message: &str,
+) -> Result<(), Error> {
+    let mut in_placeholder = false;
+    let mut placeholder = String::new();
+    let format_str = config.formatter.clone().unwrap();
+
+    for c in format_str.chars() {
+        if in_placeholder {
+            if c == '}' {
+                in_placeholder = false;
+                match placeholder.as_str() {
+                    "level" => {
+                        if !level.is_empty() {
+                            if !config.write_log_enable_colors {
+                                writer.set_color(ColorSpec::new().set_fg(color))?;
+                            }
+                            write!(writer, "[{}]", level)?;
+                            if !config.write_log_enable_colors {
+                                writer.reset()?;
+                            }
+                        }
+                    }
+                    "level:nb" => {
+                        if !level.is_empty() {
+                            if !config.write_log_enable_colors {
+                                writer.set_color(ColorSpec::new().set_fg(color))?;
+                            }
+                            write!(writer, "{}", level)?;
+                            if !config.write_log_enable_colors {
+                                writer.reset()?;
+                            }
+                        }
+                    }
+                    "time" => {
+                        if !time.is_empty() {
+                            write!(writer, "{}", time)?;
+                        }
+                    }
+                    "thread" => {
+                        if !thread.is_empty() {
+                            write!(writer, "{}", thread)?;
+                        }
+                    }
+                    "target" => {
+                        if !target.is_empty() {
+                            write!(writer, "{}", target)?;
+                        }
+                    }
+                    "file" => {
+                        if !file.is_empty() {
+                            write!(writer, "{}", file)?;
+                        }
+                    }
+                    "module" => {
+                        if !module.is_empty() {
+                            write!(writer, "{}", module)?;
+                        }
+                    }
+                    "message" => {
+                        if !message.is_empty() {
+                            write!(writer, "{}", message)?;
+                        }
+                    }
+                    _ => {
+                        // If the placeholder is unrecognized, add it back as-is
+                        write!(writer, "{{")?; // Write '{'
+                        write!(writer, "{}", placeholder)?; // Write the placeholder value
+                        write!(writer, "}}")?;
+                    }
+                }
+                placeholder.clear();
+            } else {
+                placeholder.push(c);
+            }
+        } else if c == '{' {
+            in_placeholder = true;
+        } else {
+            write!(writer, "{}", c)?;
+        }
+    }
+
+    // Handle unclosed placeholders
+    if in_placeholder {
+        write!(writer, "{{")?; // Write '{'
+        write!(writer, "{}", placeholder)?; // Write the placeholder value
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn parse_and_format_log<W>(
+    writer: &mut W,
+    format_str: &str,
+    level: &str,
+    time: &str,
+    thread: &str,
+    target: &str,
+    file: &str,
+    module: &str,
+    message: &str,
+) -> Result<(), Error> 
+where
+    W: Write + Sized,
+{
+    let mut result = String::with_capacity(
+        format_str.len()
+            + level.len()
+            + time.len()
+            + thread.len()
+            + target.len()
+            + file.len()
+            + module.len()
+            + message.len(),
+    );
+    let mut in_placeholder = false;
+    let mut placeholder = String::new();
+
+    for c in format_str.chars() {
+        if in_placeholder {
+            if c == '}' {
+                in_placeholder = false;
+                match placeholder.as_str() {
+                    "level" => {
+                        if !level.is_empty() {
+                            write!(writer, "[{}]", level)?;
+                        }
+                    }
+                    "level:nb" => {
+                        if !level.is_empty() {
+                            write!(writer, "{}", level)?;
+                        }
+                    }
+                    "time" => {
+                        if !time.is_empty() {
+                            write!(writer, "{}", time)?;
+                        }
+                    }
+                    "thread" => {
+                        if !thread.is_empty() {
+                            write!(writer, "{}", thread)?;
+                        }
+                    }
+                    "target" => {
+                        if !target.is_empty() {
+                            write!(writer, "{}", target)?;
+                        }
+                    }
+                    "file" => {
+                        if !file.is_empty() {
+                            write!(writer, "{}", file)?;
+                        }
+                    }
+                    "module" => {
+                        if !module.is_empty() {
+                            write!(writer, "{}", module)?;
+                        }
+                    }
+                    "message" => {
+                        if !message.is_empty() {
+                            write!(writer, "{}", message)?;
+                        }
+                    }
+                    _ => {
+                        // If the placeholder is unrecognized, add it back as-is
+                        result.push('{');
+                        result.push_str(&placeholder);
+                        result.push('}');
+                    }
+                }
+                placeholder.clear();
+            } else {
+                placeholder.push(c);
+            }
+        } else if c == '{' {
+            in_placeholder = true;
+        } else {
+            write!(writer, "{}", c)?;
+        }
+    }
+
+    // Handle unclosed placeholders
+    if in_placeholder {
+        write!(writer, "{{")?; // Write '{'
+        write!(writer, "{}", placeholder)?; // Write the placeholder value    
+    }
+
+    Ok(())
 }

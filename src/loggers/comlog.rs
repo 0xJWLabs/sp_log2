@@ -27,7 +27,6 @@ impl CombinedLogger {
     /// # fn main() {
     /// let _ = CombinedLogger::init(
     ///             vec![
-    /// #               #[cfg(feature = "termcolor")]
     ///                 TermLogger::new(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
     ///                 WriteLogger::new(LevelFilter::Info, Config::default(), File::create("my_rust_bin.log").unwrap())
     ///             ]
@@ -58,7 +57,6 @@ impl CombinedLogger {
     /// # fn main() {
     /// let combined_logger = CombinedLogger::new(
     ///             vec![
-    /// #               #[cfg(feature = "termcolor")]
     ///                 TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
     ///                 WriteLogger::new(LevelFilter::Info, Config::default(), File::create("my_rust_bin.log").unwrap())
     ///             ]

@@ -1,9 +1,7 @@
-#[cfg(feature = "termcolor")]
 use log::Level;
 use log::LevelFilter;
 
 use std::borrow::Cow;
-#[cfg(feature = "termcolor")]
 use termcolor::Color;
 pub use time::{format_description::FormatItem, macros::format_description, UtcOffset};
 
@@ -53,12 +51,11 @@ pub(crate) enum TimeFormat {
 #[allow(non_upper_case_globals, non_snake_case)]
 pub mod Format {
     pub const Time: u8 = 1;
-    pub const FileName: u8 = 2;
-    pub const LevelFlag: u8 = 4;
-    pub const Thread: u8 = 8;
-    pub const Location: u8 = 16;
-    pub const Target: u8 = 32;
-    pub const Module: u8 = 64;
+    pub const LevelFlag: u8 = 2;
+    pub const Thread: u8 = 4;
+    pub const FileLocation: u8 = 8;
+    pub const Target: u8 = 16;
+    pub const Module: u8 = 32;
 }
 
 /// UTF-8 end of line character sequences
@@ -104,12 +101,10 @@ pub struct Config {
     pub(crate) time_offset: UtcOffset,
     pub(crate) filter_allow: Cow<'static, [Cow<'static, str>]>,
     pub(crate) filter_ignore: Cow<'static, [Cow<'static, str>]>,
-    #[cfg(feature = "termcolor")]
     pub(crate) level_color: [Option<Color>; 6],
     pub(crate) write_log_enable_colors: bool,
-    #[cfg(feature = "paris")]
-    pub(crate) enable_paris_formatting: bool,
     pub(crate) line_ending: String,
+    pub(crate) formatter: Option<String>,
 }
 
 impl Config {
@@ -144,10 +139,15 @@ impl ConfigBuilder {
         self
     }
 
-
-    /// Set logging format 
+    /// Set logging format
     pub fn set_format(&mut self, format: u8) -> &mut ConfigBuilder {
         self.0.format = format;
+        self
+    }
+
+    /// Set logging format
+    pub fn set_formatter(&mut self, formatter: Option<&str>) -> &mut ConfigBuilder {
+        self.0.formatter = formatter.map(|s| s.to_string());
         self
     }
 
@@ -187,7 +187,6 @@ impl ConfigBuilder {
 
     /// Set the color used for printing the level (if the logger supports it),
     /// or None to use the default foreground color
-    #[cfg(feature = "termcolor")]
     pub fn set_level_color(&mut self, level: Level, color: Option<Color>) -> &mut ConfigBuilder {
         self.0.level_color[level as usize] = color;
         self
@@ -253,22 +252,6 @@ impl ConfigBuilder {
             }
             Err(_) => Err(self),
         }
-    }
-
-    /// set if you want to write colors in the logfile (default is Off)
-    #[cfg(feature = "ansi_term")]
-    pub fn set_write_log_enable_colors(&mut self, local: bool) -> &mut ConfigBuilder {
-        self.0.write_log_enable_colors = local;
-        self
-    }
-
-    /// set if you want paris formatting to be applied to this logger (default is On)
-    ///
-    /// If disabled, paris markup and formatting will be stripped.
-    #[cfg(feature = "paris")]
-    pub fn set_enable_paris_formatting(&mut self, enable_formatting: bool) -> &mut ConfigBuilder {
-        self.0.enable_paris_formatting = enable_formatting;
-        self
     }
 
     /// Add allowed target filters.
@@ -344,7 +327,10 @@ impl Default for ConfigBuilder {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            format: Format::LevelFlag | Format::Time | Format::FileName | Format::Thread | Format::Target,
+            format: Format::LevelFlag
+                | Format::Time
+                | Format::Thread
+                | Format::Target,
             level_padding: LevelPadding::Off,
             thread_log_mode: ThreadLogMode::IDs,
             thread_padding: ThreadPadding::Off,
@@ -356,7 +342,7 @@ impl Default for Config {
             write_log_enable_colors: false,
             max_level: LevelFilter::Error,
             min_level: LevelFilter::Trace,
-            #[cfg(feature = "termcolor")]
+            formatter: None,
             level_color: [
                 None,                // Default foreground
                 Some(Color::Red),    // Error
@@ -366,8 +352,6 @@ impl Default for Config {
                 Some(Color::White),  // Trace
             ],
 
-            #[cfg(feature = "paris")]
-            enable_paris_formatting: true,
             line_ending: String::from("\u{000A}"),
         }
     }
