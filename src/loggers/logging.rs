@@ -366,10 +366,9 @@ where
 {
     let format_str = config.formatter.clone().unwrap();
     let mut last_end = 0; // Tracks the position of the last match's end
-    let mut i = 0; // Initialize index manually for the loop
 
-    while i < format_str.len() {
-        let c = format_str[i..].chars().next().unwrap(); // Get the current character
+    // Process each part of the format string
+    for (i, c) in format_str.char_indices() {
         if c == '{' {
             if let Some(end) = format_str[i..].find('}') {
                 let end = i + end;
@@ -470,10 +469,7 @@ where
                 }
 
                 last_end = end + 1; // Update the last_end to the character after the closing bracket
-                i = end + 1; // Move the index past the closing '}'
             }
-        } else {
-            i += 1; // Move to the next character if not a placeholder
         }
     }
 
