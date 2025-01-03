@@ -186,11 +186,11 @@ impl TermLogger {
             }
 
             if !level.is_empty() {
-                if !self.config.write_log_enable_colors {
+                if self.config.enable_colors {
                     term_lock.set_color(ColorSpec::new().set_fg(color))?;
                 }
                 write!(term_lock, " [{}]", level)?;
-                if !self.config.write_log_enable_colors {
+                if !self.config.enable_colors {
                     term_lock.reset()?;
                 }
             }

@@ -102,7 +102,7 @@ pub struct Config {
     pub(crate) filter_allow: Cow<'static, [Cow<'static, str>]>,
     pub(crate) filter_ignore: Cow<'static, [Cow<'static, str>]>,
     pub(crate) level_color: [Option<Color>; 6],
-    pub(crate) write_log_enable_colors: bool,
+    pub(crate) enable_colors: bool,
     pub(crate) line_ending: String,
     pub(crate) formatter: Option<String>,
 }
@@ -158,6 +158,11 @@ impl ConfigBuilder {
 
     pub fn set_max_level(&mut self, level: LevelFilter) -> &mut ConfigBuilder {
         self.0.max_level = level;
+        self
+    }
+
+    pub fn set_enable_colors(&mut self, enable: bool) -> &mut ConfigBuilder {
+        self.0.enable_colors = enable;
         self
     }
 
@@ -339,7 +344,7 @@ impl Default for Config {
             time_offset: UtcOffset::UTC,
             filter_allow: Cow::Borrowed(&[]),
             filter_ignore: Cow::Borrowed(&[]),
-            write_log_enable_colors: false,
+            enable_colors: true,
             max_level: LevelFilter::Error,
             min_level: LevelFilter::Trace,
             formatter: None,

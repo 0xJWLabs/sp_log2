@@ -1,6 +1,6 @@
 [package]
 name = "sp_log2"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["0xJWLabs <0xJWLabs@gmail.com>"]
 description = "A simple and easy way of logging for Rust's log crate"
@@ -24,4 +24,3 @@ local-offset = ["time/local-offset"]
 log = { version = "0.4.*", features = ["std"] }
 time = { version = "0.3.37", features = ["formatting", "macros"] }
 termcolor = { version = "1.1" }
-regex = "1.11.1"
