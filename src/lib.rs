@@ -8,7 +8,7 @@ pub use self::config::{
 
 pub use self::loggers::{CombinedLogger, FileLogger, SimpleLogger, WriteLogger};
 pub use self::loggers::{TermLogger, TerminalMode};
-pub use termcolor::{Color, ColorChoice};
+pub use termcolor2::{Color, ColorChoice};
 
 pub use log::{Level, LevelFilter};
 

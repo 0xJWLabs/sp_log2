@@ -4,8 +4,8 @@ use log::{
 use std::default::Default;
 use std::io::{Error, Write};
 use std::sync::Mutex;
-use termcolor::{BufferedStandardStream, ColorChoice};
-use termcolor::{ColorSpec, WriteColor};
+use termcolor2::{BufferedStandardStream, ColorChoice};
+use termcolor2::{ColorSpec, WriteColor};
 
 use super::logging::*;
 
@@ -124,7 +124,7 @@ impl TermLogger {
         record: &Record<'_>,
         term_lock: &mut BufferedStandardStream,
     ) -> Result<(), Error> {
-        let color = self.config.level_color[record.level() as usize];
+        let color = self.config.level_color[record.level() as usize].clone();
 
         if record.level() > self.config.min_level || record.level() < self.config.max_level {
             return Ok(());

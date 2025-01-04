@@ -2,7 +2,7 @@ use log::Level;
 use log::LevelFilter;
 
 use std::borrow::Cow;
-use termcolor::Color;
+use termcolor2::Color;
 pub use time::{format_description::FormatItem, macros::format_description, UtcOffset};
 
 #[derive(Debug, Clone, Copy)]

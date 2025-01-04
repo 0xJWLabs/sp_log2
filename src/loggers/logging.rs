@@ -5,7 +5,7 @@ use std::any::Any;
 use std::io::{Error, Write};
 use std::str::FromStr;
 use std::thread;
-use termcolor::{BufferedStandardStream, Color, ColorSpec, WriteColor};
+use termcolor2::{BufferedStandardStream, Color, ColorSpec, WriteColor};
 
 /// Attempts to log a message based on the provided configuration.
 /// Writes the log message to the provided writer if it should not be skipped.
@@ -230,84 +230,15 @@ pub fn should_skip(config: &Config, record: &Record<'_>) -> bool {
 }
 
 #[inline]
-fn parse_percent_or_255(s: &str) -> Option<(u8, bool)> {
-    if s.ends_with('%') {
-        s.strip_suffix('%')
-            .and_then(|s| s.parse().ok())
-            .map(|t: u8| (t, true))
-    } else {
-        s.parse().ok().map(|t: u8| (t, false))
-    }
-}
-
-#[inline]
-fn parse_hex(s: &str) -> Option<Color> {
-    if !s.is_ascii() {
-        return None;
-    }
-
-    let len = s.len();
-    match len {
-        3 => Some(Color::Rgb(
-            u8::from_str_radix(&s[0..1], 16).ok()? * 17,
-            u8::from_str_radix(&s[1..2], 16).ok()? * 17,
-            u8::from_str_radix(&s[2..3], 16).ok()? * 17,
-        )),
-        6 => {
-            // Handle 6-character hex (e.g., "ff00ff")
-            Some(Color::Rgb(
-                u8::from_str_radix(&s[0..2], 16).ok()?,
-                u8::from_str_radix(&s[2..4], 16).ok()?,
-                u8::from_str_radix(&s[4..6], 16).ok()?,
-            ))
-        }
-        _ => None, // Return None for invalid hex lengths
-    }
-}
-
-#[inline]
-fn parse_rgb(rgb: &str) -> Option<Color> {
-    let params: Vec<&str> = rgb.split(',').map(|s| s.trim()).collect();
-    if params.len() != 3 {
-        return None;
-    }
-
-    let r = parse_percent_or_255(params[0]);
-    let g = parse_percent_or_255(params[1]);
-    let b = parse_percent_or_255(params[2]);
-
-    if let (Some((r, r_fmt)), Some((g, g_fmt)), Some((b, b_fmt))) = (r, g, b) {
-        if r_fmt == g_fmt && g_fmt == b_fmt {
-            return Some(Color::Rgb(r, g, b))
-        }
-    }
-    None
-}
-
-#[inline]
 fn apply_style(style: &str) -> Option<(Color, bool)> {
-    if style.starts_with('#') || style.starts_with("bg#") {
-        let prefix_len = if style.starts_with('#') { 1 } else { 3 };
-        let hex = &style[prefix_len..style.len()];
-        if let Some(color) = parse_hex(hex) {
-            return Some((color, style.starts_with('#'))); // false indicates background
-        }
-    }
+    let is_bg = style.starts_with("bg");
+    let new_style = match is_bg {
+        true => &style[2..],
+        false => style
+    };
 
-    if style.starts_with("rgb(") || style.starts_with("bgrgb(") {
-        let prefix_len = if style.starts_with("rgb(") { 4 } else { 6 }; // Remove "rgb(" or "bgrgb("
-        let rgb = &style[prefix_len..style.len() - 1];
-        if let Some(color) = parse_rgb(rgb) {
-            return Some((color, style.starts_with("rgb(")))
-        }
-    }
-
-    if let Some(color_name) = style.strip_prefix("bg") {
-        if let Ok(color) = Color::from_str(color_name) {
-            return Some((color, false));
-        }
-    } else if let Ok(color) = Color::from_str(style) {
-        return Some((color, true));
+    if let Ok(color) = Color::from_str(new_style) {
+        return Some((color, !is_bg));
     }
 
     None
@@ -438,7 +369,7 @@ where
                     }
 
                     if key == "level" {
-                        fg_color = fg_color.or(level_color);
+                        fg_color = fg_color.or(level_color.clone());
                     }
 
                     if config.enable_colors {
