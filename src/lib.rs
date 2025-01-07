@@ -2,8 +2,7 @@ mod config;
 mod loggers;
 
 pub use self::config::{
-    format_description, Config, ConfigBuilder, FormatItem, LevelPadding, TargetPadding,
-    ThreadLogMode, ThreadPadding, UtcOffset, Format
+    Config, ConfigBuilder, Format, LevelPadding, TargetPadding, ThreadLogMode, ThreadPadding,
 };
 
 pub use self::loggers::{CombinedLogger, FileLogger, SimpleLogger, WriteLogger};

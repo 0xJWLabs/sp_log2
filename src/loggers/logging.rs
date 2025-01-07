@@ -1,5 +1,6 @@
 use crate::config::{Format, TargetPadding, TimeFormat};
 use crate::{Config, LevelPadding, ThreadLogMode, ThreadPadding};
+use chrono::DateTime;
 use log::Record;
 use std::any::Any;
 use std::io::{Error, Write};
@@ -94,21 +95,17 @@ where
 /// Writes the current time based on the configured format.
 #[inline(always)]
 pub fn write_time(config: &Config) -> Result<String, Error> {
-    use time::error::Format;
-    use time::format_description::well_known::*;
+    use chrono::Local;
 
-    let time = time::OffsetDateTime::now_utc().to_offset(config.time_offset);
-    let formatted_time = match config.time_format {
-        TimeFormat::Rfc2822 => time.format(&Rfc2822),
-        TimeFormat::Rfc3339 => time.format(&Rfc3339),
-        TimeFormat::Custom(format) => time.format(&format),
+    let dt: DateTime<Local> = Local::now();
+
+    let formatted_time = match config.time_format.clone() {
+        TimeFormat::Rfc2822 => dt.to_rfc2822(),
+        TimeFormat::Rfc3339 => dt.to_rfc3339(),
+        TimeFormat::Custom(format) => dt.format(format).to_string(),
     };
 
-    match formatted_time {
-        Ok(time_string) => Ok(time_string),
-        Err(Format::StdIo(err)) => Err(err),
-        Err(err) => panic!("Invalid time format: {}", err),
-    }
+    Ok(formatted_time)
 }
 
 /// Writes the log level to a string based on the configured padding.
@@ -295,141 +292,6 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-#[deprecated]
-fn _parse_and_format_log_internal<W>(
-    writer: &mut W,
-    level_color: Option<Color>,
-    config: &Config,
-    level: &str,
-    time: &str,
-    thread: &str,
-    target: &str,
-    file: &str,
-    module: &str,
-    message: &str,
-    is_terminal: bool,
-) -> Result<(), Error>
-where
-    W: Write + Sized + Any,
-{
-    let format_str = config.formatter.clone().unwrap();
-    let mut last_end = 0; // Tracks the position of the last match's end
-
-    // Process each part of the format string
-    for (i, c) in format_str.char_indices() {
-        if c == '{' {
-            if let Some(end) = format_str[i..].find('}') {
-                let end = i + end;
-
-                // Write the part before the placeholder
-                if last_end < i {
-                    write!(writer, "{}", &format_str[last_end..i])?;
-                }
-
-                // Extract the key (and possibly the modifiers)
-                let placeholder = &format_str[i + 1..end];
-                let parts: Vec<&str> = placeholder.split(':').collect();
-                let key = parts[0];
-
-                let mut use_bracket_level = true;
-
-                if is_terminal {
-                    // Parse modifiers
-                    let styles = if parts.len() > 1 { parts[1..].to_vec() } else { vec![] };
-
-                    let mut fg_color = None;
-                    let mut bg_color = None;
-                    let mut bold = false;
-                    let mut italic = false;
-                    let mut dim = false;
-                    let mut underline = false;
-                    let mut strikethrough = false;
-
-                    for style in styles {
-                        match style.to_ascii_lowercase().as_str() {
-                            "bold" => bold = true,
-                            "italic" => italic = true,
-                            "dim" => dim = true,
-                            "underline" => underline = true,
-                            "strikethrough" => strikethrough = true,
-                            "nb" | "nobrackets" | "no_brackets" => {
-                                if key == "level" {
-                                    use_bracket_level = false;
-                                }
-                            }
-                            _ => {
-                                if let Some((color, is_fg)) = apply_style(style) {
-                                    if is_fg {
-                                        fg_color = fg_color.or(Some(color));
-                                    } else {
-                                        bg_color = bg_color.or(Some(color));
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if key == "level" {
-                        fg_color = fg_color.or(level_color.clone());
-                    }
-
-                    if config.enable_colors {
-                        if let Some(writer) =
-                            (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
-                        {
-                            writer.set_color(
-                                ColorSpec::new()
-                                    .set_fg(fg_color)
-                                    .set_bg(bg_color)
-                                    .set_bold(bold)
-                                    .set_italic(italic)
-                                    .set_dimmed(dim)
-                                    .set_underline(underline)
-                                    .set_strikethrough(strikethrough),
-                            )?;
-                        }
-                    }
-                }
-
-                // Write the value for the placeholder
-                match key {
-                    "time" => write!(writer, "{}", time)?,
-                    "thread" => write!(writer, "{}", thread)?,
-                    "target" => write!(writer, "{}", target)?,
-                    "level" => {
-                        if use_bracket_level {
-                            write!(writer, "[{}]", level)?
-                        } else {
-                            write!(writer, "{}", level)?
-                        }
-                    }
-                    "file" => write!(writer, "{}", file)?,
-                    "module" => write!(writer, "{}", module)?,
-                    "message" => write!(writer, "{}", message)?,
-                    _ => write!(writer, "{}", placeholder)?,
-                }
-
-                if is_terminal && config.enable_colors {
-                    if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
-                    {
-                        writer.reset()?;
-                    }
-                }
-
-                last_end = end + 1; // Update the last_end to the character after the closing bracket
-            }
-        }
-    }
-
-    // Write any remaining part of the format_str after the last match
-    if last_end < format_str.len() {
-        write!(writer, "{}", &format_str[last_end..])?;
-    }
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
 fn parse_and_format_log_internal<W>(
     writer: &mut W,
     level_color: Option<Color>,
@@ -469,7 +331,20 @@ where
                         // Include the brackets in the output by simply writing them
                         write!(writer, "[")?;
                         let placeholder = &format_str[i + 2..end];
-                        process_placeholder(writer, placeholder, level_color.clone(), config, level, time, thread, target, file, module, message, is_terminal)?;
+                        process_placeholder(
+                            writer,
+                            placeholder,
+                            level_color.clone(),
+                            config,
+                            level,
+                            time,
+                            thread,
+                            target,
+                            file,
+                            module,
+                            message,
+                            is_terminal,
+                        )?;
                         write!(writer, "]")?;
 
                         last_end = end + 2; // Update last_end to the character after `]]`
@@ -488,7 +363,20 @@ where
                 }
 
                 let placeholder = &format_str[i + 1..end];
-                process_placeholder(writer, placeholder, level_color.clone(), config, level, time, thread, target, file, module, message, is_terminal)?;
+                process_placeholder(
+                    writer,
+                    placeholder,
+                    level_color.clone(),
+                    config,
+                    level,
+                    time,
+                    thread,
+                    target,
+                    file,
+                    module,
+                    message,
+                    is_terminal,
+                )?;
 
                 last_end = end + 1; // Update last_end to the character after `]`
             }
@@ -527,7 +415,11 @@ where
     let mut use_bracket_level = true;
 
     if is_terminal {
-        let styles = if parts.len() > 1 { parts[1..].to_vec() } else { vec![] };
+        let styles = if parts.len() > 1 {
+            parts[1..].to_vec()
+        } else {
+            vec![]
+        };
 
         let mut fg_color = None;
         let mut bg_color = None;
@@ -566,8 +458,7 @@ where
         }
 
         if config.enable_colors {
-            if let Some(writer) =
-                (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+            if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
             {
                 writer.set_color(
                     ColorSpec::new()
@@ -601,9 +492,7 @@ where
     }
 
     if is_terminal && config.enable_colors {
-        if let Some(writer) =
-            (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
-        {
+        if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>() {
             writer.reset()?;
         }
     }

@@ -3,7 +3,6 @@ use log::LevelFilter;
 
 use std::borrow::Cow;
 use termcolor2::Color;
-pub use time::{format_description::FormatItem, macros::format_description, UtcOffset};
 
 #[derive(Debug, Clone, Copy)]
 /// Defines how padding should be applied to the logging level in the log output.
@@ -57,7 +56,7 @@ pub enum ThreadLogMode {
 pub(crate) enum TimeFormat {
     Rfc2822,
     Rfc3339,
-    Custom(&'static [time::format_description::FormatItem<'static>]),
+    Custom(&'static str),
 }
 
 #[allow(non_upper_case_globals, non_snake_case)]
@@ -121,7 +120,6 @@ pub struct Config {
     pub(crate) min_level: LevelFilter,
     pub(crate) max_level: LevelFilter,
     pub(crate) time_format: TimeFormat,
-    pub(crate) time_offset: UtcOffset,
     pub(crate) filter_allow: Cow<'static, [Cow<'static, str>]>,
     pub(crate) filter_ignore: Cow<'static, [Cow<'static, str>]>,
     pub(crate) level_color: [Option<Color>; 6],
@@ -255,27 +253,22 @@ impl ConfigBuilder {
 
     /// Sets the time format to a custom representation.
     ///
-    /// The easiest way to satisfy the static lifetime of the argument is to directly use the
-    /// re-exported [`time::macros::format_description`] macro.
+    /// *Note*: The default time format is `%H:%M:%S`.
     ///
-    /// *Note*: The default time format is `[hour]:[minute]:[second]`.
-    ///
-    /// The syntax for the format_description macro can be found in the
-    /// [`time` crate book](https://time-rs.github.io/book/api/format-description.html).
+    /// The syntax for the format can be found in the
+    /// [`strftime` crate book](https://docs.rs/chrono/latest/chrono/format/strftime/index.html).
     ///
     /// # Usage
     ///
-    /// ```
-    /// # use sp_log2::{ConfigBuilder, format_description};
+    /// ```rust
+    /// use sp_log2::{ConfigBuilder, format_description};
     /// let config = ConfigBuilder::new()
-    ///     .set_time_format_custom(format_description!("[hour]:[minute]:[second].[subsecond]"))
+    ///     .set_time_format_custom("%Y-%m-%d %H:%M:%S")
     ///     .build();
     /// ```
-    pub fn set_time_format_custom(
-        &mut self,
-        time_format: &'static [FormatItem<'static>],
-    ) -> &mut ConfigBuilder {
-        self.0.time_format = TimeFormat::Custom(time_format);
+    pub fn set_time_format_custom(&mut self, time_format: &str) -> &mut ConfigBuilder {
+        self.0.time_format =
+            TimeFormat::Custom(Box::leak(time_format.to_string().into_boxed_str()));
         self
     }
 
@@ -293,32 +286,6 @@ impl ConfigBuilder {
     pub fn set_time_format_rfc3339(&mut self) -> &mut ConfigBuilder {
         self.0.time_format = TimeFormat::Rfc3339;
         self
-    }
-
-    /// Sets the time offset used for logging the timestamp (default is UTC).
-    ///
-    /// The `offset` specifies the timezone offset to be applied to the log timestamp.
-    pub fn set_time_offset(&mut self, offset: UtcOffset) -> &mut ConfigBuilder {
-        self.0.time_offset = offset;
-        self
-    }
-
-    /// Sets the offset used to the current local time offset
-    /// (overriding values previously set by [`ConfigBuilder::set_time_offset`]).
-    ///
-    /// This function may fail if the offset cannot be determined soundly.
-    /// This may be the case, when the program is multi-threaded by the time of calling this function.
-    /// One can opt-out of this behavior by setting `RUSTFLAGS="--cfg unsound_local_offset"`.
-    /// Doing so is not recommended, completely untested and may cause unexpected segfaults.
-    #[cfg(feature = "local-offset")]
-    pub fn set_time_offset_to_local(&mut self) -> Result<&mut ConfigBuilder, &mut ConfigBuilder> {
-        match UtcOffset::current_local_offset() {
-            Ok(offset) => {
-                self.0.time_offset = offset;
-                Ok(self)
-            }
-            Err(_) => Err(self),
-        }
     }
 
     /// Add allowed target filters.
@@ -403,8 +370,7 @@ impl Default for Config {
             thread_log_mode: ThreadLogMode::IDs,
             thread_padding: ThreadPadding::Off,
             target_padding: TargetPadding::Off,
-            time_format: TimeFormat::Custom(format_description!("[hour]:[minute]:[second]")),
-            time_offset: UtcOffset::UTC,
+            time_format: TimeFormat::Custom("%H:%M:%S"),
             filter_allow: Cow::Borrowed(&[]),
             filter_ignore: Cow::Borrowed(&[]),
             enable_colors: true,
