@@ -261,7 +261,7 @@ impl ConfigBuilder {
     /// # Usage
     ///
     /// ```rust
-    /// use sp_log2::{ConfigBuilder, format_description};
+    /// use sp_log2::ConfigBuilder;
     /// let config = ConfigBuilder::new()
     ///     .set_time_format_custom("%Y-%m-%d %H:%M:%S")
     ///     .build();
