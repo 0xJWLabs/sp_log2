@@ -234,7 +234,7 @@ fn apply_style(style: &str) -> Option<(Color, bool)> {
     let is_bg = style.starts_with("bg");
     let new_style = match is_bg {
         true => &style[2..],
-        false => style
+        false => style,
     };
 
     if let Ok(color) = Color::from_str(new_style) {
@@ -295,7 +295,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn parse_and_format_log_internal<W>(
+#[deprecated]
+fn _parse_and_format_log_internal<W>(
     writer: &mut W,
     level_color: Option<Color>,
     config: &Config,
@@ -427,3 +428,281 @@ where
 
     Ok(())
 }
+
+#[allow(clippy::too_many_arguments)]
+fn parse_and_format_log_internal<W>(
+    writer: &mut W,
+    level_color: Option<Color>,
+    config: &Config,
+    level: &str,
+    time: &str,
+    thread: &str,
+    target: &str,
+    file: &str,
+    module: &str,
+    message: &str,
+    is_terminal: bool,
+) -> Result<(), Error>
+where
+    W: Write + Sized + Any,
+{
+    let format_str = config.formatter.clone().unwrap();
+    let mut last_end = 0; // Tracks the position of the last match's end
+    let mut chars = format_str.chars().enumerate().peekable(); // To look ahead for brackets
+
+    while let Some((i, c)) = chars.next() {
+        if c == '[' {
+            // Check for double brackets `[[`
+            if let Some((_, next_c)) = chars.peek() {
+                if *next_c == '[' {
+                    chars.next(); // Consume the second `[`
+
+                    // Find the closing double brackets `]]`
+                    if let Some(end) = format_str[i + 2..].find("]]") {
+                        let end = i + 2 + end;
+
+                        // Write the part before the placeholder
+                        if last_end < i {
+                            write!(writer, "{}", &format_str[last_end..i])?;
+                        }
+
+                        // Include the brackets in the output by simply writing them
+                        write!(writer, "[")?;
+                        let placeholder = &format_str[i + 2..end];
+                        process_placeholder(writer, placeholder, level_color.clone(), config, level, time, thread, target, file, module, message, is_terminal)?;
+                        write!(writer, "]")?;
+
+                        last_end = end + 2; // Update last_end to the character after `]]`
+                        continue;
+                    }
+                }
+            }
+
+            // Handle single brackets `[`
+            if let Some(end) = format_str[i + 1..].find(']') {
+                let end = i + 1 + end;
+
+                // Write the part before the placeholder
+                if last_end < i {
+                    write!(writer, "{}", &format_str[last_end..i])?;
+                }
+
+                let placeholder = &format_str[i + 1..end];
+                process_placeholder(writer, placeholder, level_color.clone(), config, level, time, thread, target, file, module, message, is_terminal)?;
+
+                last_end = end + 1; // Update last_end to the character after `]`
+            }
+        }
+    }
+
+    // Write any remaining part of the format_str after the last match
+    if last_end < format_str.len() {
+        write!(writer, "{}", &format_str[last_end..])?;
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_placeholder<W>(
+    writer: &mut W,
+    placeholder: &str,
+    level_color: Option<Color>,
+    config: &Config,
+    level: &str,
+    time: &str,
+    thread: &str,
+    target: &str,
+    file: &str,
+    module: &str,
+    message: &str,
+    is_terminal: bool,
+) -> Result<(), Error>
+where
+    W: Write + Sized + Any,
+{
+    let parts: Vec<&str> = placeholder.split(':').collect();
+    let key = parts[0];
+
+    let mut use_bracket_level = true;
+
+    if is_terminal {
+        let styles = if parts.len() > 1 { parts[1..].to_vec() } else { vec![] };
+
+        let mut fg_color = None;
+        let mut bg_color = None;
+        let mut bold = false;
+        let mut italic = false;
+        let mut dim = false;
+        let mut underline = false;
+        let mut strikethrough = false;
+
+        for style in styles {
+            match style.to_ascii_lowercase().as_str() {
+                "bold" => bold = true,
+                "italic" => italic = true,
+                "dim" => dim = true,
+                "underline" => underline = true,
+                "strikethrough" => strikethrough = true,
+                "nb" | "nobrackets" | "no_brackets" => {
+                    if key == "level" {
+                        use_bracket_level = false;
+                    }
+                }
+                _ => {
+                    if let Some((color, is_fg)) = apply_style(style) {
+                        if is_fg {
+                            fg_color = fg_color.or(Some(color));
+                        } else {
+                            bg_color = bg_color.or(Some(color));
+                        }
+                    }
+                }
+            }
+        }
+
+        if key == "level" {
+            fg_color = fg_color.or(level_color.clone());
+        }
+
+        if config.enable_colors {
+            if let Some(writer) =
+                (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+            {
+                writer.set_color(
+                    ColorSpec::new()
+                        .set_fg(fg_color)
+                        .set_bg(bg_color)
+                        .set_bold(bold)
+                        .set_italic(italic)
+                        .set_dimmed(dim)
+                        .set_underline(underline)
+                        .set_strikethrough(strikethrough),
+                )?;
+            }
+        }
+    }
+
+    match key {
+        "time" => write!(writer, "{}", time)?,
+        "thread" => write!(writer, "{}", thread)?,
+        "target" => write!(writer, "{}", target)?,
+        "level" => {
+            if use_bracket_level {
+                write!(writer, "[{}]", level)?
+            } else {
+                write!(writer, "{}", level)?
+            }
+        }
+        "file" => write!(writer, "{}", file)?,
+        "module" => write!(writer, "{}", module)?,
+        "message" => write!(writer, "{}", message)?,
+        _ => write!(writer, "{}", placeholder)?,
+    }
+
+    if is_terminal && config.enable_colors {
+        if let Some(writer) =
+            (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+        {
+            writer.reset()?;
+        }
+    }
+
+    Ok(())
+}
+
+// #[allow(clippy::too_many_arguments)]
+// fn parse_and_format_log_internal<W>(
+//     writer: &mut W,
+//     level_color: Option<Color>,
+//     config: &Config,
+//     level: &str,
+//     time: &str,
+//     thread: &str,
+//     target: &str,
+//     file: &str,
+//     module: &str,
+//     message: &str,
+//     is_terminal: bool,
+// ) -> Result<(), Error>
+// where
+//     W: Write + Sized + Any,
+// {
+//     let format_str = config.formatter.clone().unwrap();
+//     let mut last_end = 0;
+//
+//     for (i, c) in format_str.char_indices() {
+//     if c == '[' {
+//         let mut closing_bracket = ']';
+//         let mut start_idx = i + 1;
+//
+//         // Detect double-brackets for literal brackets
+//         if format_str[start_idx..].starts_with('[') {
+//             closing_bracket = ']'; // Double brackets use a single closing bracket
+//             start_idx += 1;       // Adjust start index
+//         }
+//
+//         // Find the closing bracket
+//         if let Some(end_idx) = format_str[start_idx..].find(closing_bracket) {
+//             let end_idx = start_idx + end_idx;
+//
+//             // Write the part before the placeholder
+//             if last_end < i {
+//                 write!(writer, "{}", &format_str[last_end..i])?;
+//             }
+//
+//             // Extract the placeholder content
+//             let placeholder = &format_str[start_idx..end_idx];
+//             let parts: Vec<&str> = placeholder.split(':').collect();
+//             let key = parts[0];
+//
+//             // Extract styles (if any)
+//             let style = parts.get(1).cloned();
+//
+//             // Apply styles if terminal supports it
+//             if is_terminal && config.enable_colors {
+//                 if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+//                 {
+//                     apply_style(writer, style)?;
+//                 }
+//             }
+//
+//             // Write the resolved placeholder value
+//             let value = match key {
+//                 "time" => time,
+//                 "thread" => thread,
+//                 "target" => target,
+//                 "level" => level,
+//                 "file" => file,
+//                 "message" => message,
+//                 _ => key, // Unknown placeholders are treated as literal keys
+//             };
+//
+//             if closing_bracket == ']' && placeholder.starts_with('[') {
+//                 // Double brackets -> wrap output in brackets
+//                 write!(writer, "[{}]", value)?;
+//             } else {
+//                 // Single brackets -> raw output
+//                 write!(writer, "{}", value)?;
+//             }
+//
+//             if is_terminal && config.enable_colors {
+//                 if let Some(writer) = (writer as &mut dyn Any).downcast_mut::<BufferedStandardStream>()
+//                 {
+//                     writer.reset()?; // Reset styles
+//                 }
+//             }
+//
+//             last_end = end_idx + 1; // Update last_end
+//         }
+//     }
+// }
+//
+// // Write remaining text after the last placeholder
+// if last_end < format_str.len() {
+//     write!(writer, "{}", &format_str[last_end..])?;
+// }
+//
+//
+//     Ok(())
+// }
